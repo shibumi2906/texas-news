@@ -564,12 +564,14 @@ ________________
 
 22. Correction / Retraction
 Integrator должен иметь возможность сообщить:
-create
-update
-correct
-retract
-delete
-restore
+created
+updated
+corrected
+retracted
+deleted
+
+
+Это значения поля operation в schema 1.1. Операция restored не входит в текущий Integrator contract; editorial restore остаётся Site-side workflow.
 
 
 Retraction не должен физически удалять историю публикации.
@@ -774,66 +776,93 @@ POST /internal/v1/ingestion/content
 CanonicalNewsPackageEnvelope
 
 
+Wire-level schema, validation rules и delivery semantics нормативно определены в NEWS_INTEGRATOR_INTERFACE.md. Этот документ не создаёт альтернативный ingestion contract.
+
+
+Поддерживаются ровно schema versions:
+* 1.0;
+* 1.1.
+
+
+Schema 1.1 является additive extension к 1.0. Unsupported schema versions отклоняются до persistence.
+
+
 ________________
 
 
 32. CanonicalNewsPackageEnvelope
-Envelope должен содержать минимум:
-{
-  "schema_version": "1.0",
-  "event_id": "uuid",
-  "event_type": "content.created",
-  "occurred_at": "ISO-8601",
-  "producer": "news-integrator",
-  "content_id": "external-id",
-  "revision": 1,
-  "payload": {}
-}
+Обязательные identity и payload fields:
+* schema_version;
+* package_id;
+* package_version;
+* instance_id;
+* event_id;
+* content;
+* sources.
+
+
+Schema 1.1 добавляет без удаления полей 1.0:
+* operation;
+* revision_reason;
+* typed categories и topics;
+* geographies;
+* typed media;
+* ai_provenance;
+* richer source provenance.
+
+
+Site Platform должна потреблять canonical content, language_versions, source provenance, categories, topics, geographies, media и AI provenance. Legacy taxonomy и regions сохраняются для совместимости с 1.0 consumers.
+
+
+Точная структура полей и validation rules определены в NEWS_INTEGRATOR_INTERFACE.md и generated canonical schema; SPEC.md не дублирует полную payload schema.
 
 
 ________________
 
 
-33. Supported Ingestion Events
-Минимум:
-content.created
-content.updated
-content.corrected
-content.retracted
-content.deleted
-content.restored
+33. Lifecycle Operations
+В schema 1.1 поле operation принимает только:
+* created;
+* updated;
+* corrected;
+* retracted;
+* deleted.
+
+
+Initial package использует created и package_version 1. Updated, corrected, retracted и deleted создают новые immutable package versions. Correction требует replacement content и reason. Retraction и deletion требуют reason; deletion является tombstone, а предыдущие версии сохраняются.
+
+
+Операция content.restored отсутствует в actual Integrator contract и не должна приниматься как wire-level lifecycle operation.
 
 
 ________________
 
 
-34. Idempotency
-Каждое сообщение содержит уникальный:
-event_id
+34. Package Identity and Idempotency
+package_id является стабильной logical identity пакета.
+package_version является monotonically increasing positive integer.
+event_id сохраняет identity события, но delivery idempotency определяется immutable package identity/version pair.
 
 
-Backend должен сохранять обработанные event IDs.
-Повторная доставка того же события:
-* не создаёт duplicate content;
-* не создаёт duplicate version;
-* возвращает успешный idempotent response.
+Каждый delivery содержит:
+Idempotency-Key: <package_id>:<package_version>
+
+
+Повторная доставка той же package version:
+* не создаёт duplicate IncomingPackageVersion;
+* не создаёт duplicate Site-side content version;
+* возвращает успешный idempotent acknowledgement.
 ________________
 
 
-35. Revision Ordering
-Каждый материал имеет monotonically increasing:
-revision
+35. Package Version Ordering and Receiver Persistence
+Каждая принятая package version сохраняется как immutable IncomingPackageVersion. IncomingPackage хранит latest_version для текущего представления пакета.
 
 
-Backend не должен заменять новую версию старой.
-Если получена revision меньше текущей:
-ignore + log
+latest_version продвигается только если incoming package_version больше текущей. Late replay старой версии может быть сохранён или подтверждён idempotently, но не должен регрессировать current state.
 
 
-Если получена неожиданно большая revision:
-accept according to configured policy
-+
-log revision gap
+Package versions не изменяются in place. Receiver persistence и обновление latest pointer выполняются transactionally.
 
 
 ________________
@@ -841,54 +870,79 @@ ________________
 
 36. Authentication Between Integrator and Platform
 Использовать request signing.
-Минимальные требования:
-* HMAC signature;
-* timestamp;
-* replay protection;
-* key ID;
-* secret rotation.
 Headers:
-X-Integrator-Key-Id
-X-Integrator-Timestamp
-X-Integrator-Signature
-X-Event-Id
+Idempotency-Key: <package_id>:<package_version>
+X-Integrator-Instance-Id: <integrator UUID>
+X-Signing-Key-Id: <key identifier>
+X-Timestamp: <UTC timestamp>
+X-Signature: <hex HMAC-SHA256>
+
+
+Signature покрывает request timestamp и exact request body. Site Platform должна:
+* выбрать verification secret по X-Signing-Key-Id;
+* проверить timestamp в пределах configured clock-skew window;
+* проверить HMAC-SHA256 в constant time;
+* поддерживать active и previous keys во время rotation window;
+* отклонять unknown и retired key IDs.
+
+
+Rotation выполняется с перекрытием: новый key устанавливается как active, предыдущий временно сохраняется как previous, после подтверждения доставки previous key удаляется. Secrets не должны попадать в responses, audit details, logs или metrics.
 
 
 ________________
 
 
-37. Ingestion Retry
-Integrator отвечает за delivery retry.
-Site Platform должна возвращать корректные HTTP statuses.
-Пример:
-200/201 — accepted
-409 — conflict
-422 — invalid payload
-429 — rate limited
-500/503 — retryable server failure
+37. Delivery Acknowledgement
+Successful non-empty response использует IncomingPackageReceipt и должен содержать совпадающие с request:
+* package_id;
+* package_version;
+* status.
+
+
+Malformed или inconsistent non-empty acknowledgement считается delivery failure. Для совместимости со старыми Site receivers Integrator также принимает empty successful 2xx response.
+
+
+Site Platform возвращает корректные HTTP statuses, чтобы Integrator мог отличать accepted delivery, invalid/non-retryable request, rate limiting и retryable server failure.
 
 
 ________________
 
 
-38. Dead Letter Queue
-События, которые невозможно доставить после configured retry policy, должны попадать в DLQ Integrator.
-Site Platform не должна бесконечно повторять invalid ingestion internally.
+38. Retry and Dead Letter Responsibility
+Integrator владеет:
+* delivery retries;
+* durable retry attempt budget;
+* exponential delivery backoff;
+* dead-letter state;
+* operator inspection;
+* manual retry/requeue.
+
+
+Site Platform не реализует независимый delivery DLQ для incoming packages и не повторяет invalid ingestion internally. Её обязанность — вернуть корректный HTTP response для классификации результата Integrator-ом.
 ________________
 
 
-39. Backfill
-Должен существовать endpoint или operation для массового historical import.
-Например:
-POST /internal/v1/ingestion/backfill
+39. Replay and Backfill
+Replay/backfill инициируется на стороне Integrator и повторно отправляет существующие immutable package versions. Replay:
+* не создаёт и не изменяет canonical packages;
+* сохраняет исходные package_id и package_version;
+* сохраняет исходный wire-level Idempotency-Key;
+* использует тот же signed CanonicalNewsPackageEnvelope;
+* является idempotent для Site receiver;
+* не позволяет старым версиям регрессировать latest state.
 
 
-Backfill использует тот же canonical content contract.
-Нельзя создавать отдельную несовместимую модель данных для historical import.
+Отдельный Site-side ingestion/backfill endpoint не требуется. Integrator-side replay administration и status API описаны в NEWS_INTEGRATOR_INTERFACE.md.
 ________________
 
 
 40. Responsibility Boundary
+Integrator владеет source ingestion, parsing, normalization, canonical package creation, package versioning, source provenance, enrichment, clustering, taxonomy/geography/media extraction и outbound signed delivery.
+
+
+Site Platform владеет receipt validation, immutable incoming package persistence, mapping в Site domain, editorial workflows, publication, feeds и distribution.
+
+
 Function
 	Integrator
 	Site Platform
@@ -2215,22 +2269,29 @@ ________________
 
 
 Добавить:
-* HMAC authentication;
-* event idempotency;
-* revision handling;
-* create;
-* update;
-* correction;
-* retraction;
-* deletion;
-* restore;
-* validation;
+* приём CanonicalNewsPackageEnvelope schema 1.0 и 1.1;
+* rejection unsupported schema versions before persistence;
+* HMAC-SHA256 authentication и signing-key rotation semantics из раздела 36;
+* package identity/version idempotency;
+* immutable IncomingPackageVersion persistence;
+* latest-version ordering без regression при late replay;
+* lifecycle operations created, updated, corrected, retracted и deleted;
+* IncomingPackageReceipt acknowledgement с empty successful 2xx compatibility;
+* mapping content, language versions, sources/provenance, categories, topics, geographies, media и AI provenance;
+* compatibility с legacy taxonomy и regions;
+* payload validation;
 * ingestion logs.
+
+
+NEWS_INTEGRATOR_INTERFACE.md является нормативным источником wire-level payload, signing, acknowledgement, replay и compatibility semantics. Site Platform не реализует отдельный incoming delivery DLQ или специальный backfill endpoint.
 Acceptance Criteria
-Повтор одного event не создаёт duplicate.
-Old revision не заменяет new revision.
-Retraction работает.
-Invalid signature отклоняется.
+Повтор package_id/package_version не создаёт duplicate package или content version.
+Каждая принятая version сохраняется immutably.
+Old package_version не регрессирует latest state.
+Late replay подтверждается idempotently.
+Retraction и deletion сохраняют prior versions.
+Invalid signature, timestamp или signing key отклоняется.
+Unsupported schema_version отклоняется до persistence.
 ________________
 
 
