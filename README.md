@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 1 establishes the production-oriented modular-monolith foundation and initial Site Platform core domain. It contains a FastAPI API, a Next.js web shell, PostgreSQL, Redis, an infrastructure-only worker process, migrations, health checks, core domain models, application services, and code-quality tooling. Integrator ingestion, publication workflows, feeds, users, community, and AI functionality are not implemented yet.
+Phase 2 adds the production Site-side receiver for the existing News Integrator to the Phase 1 modular-monolith foundation. It accepts the signed canonical package contract, stores immutable incoming versions, maps current source-derived state into the core domain, and remains safe under duplicate and out-of-order delivery. Publication workflows, feeds, users, community, and Site AI functionality are not implemented yet.
 
 ## Prerequisites
 
@@ -53,6 +53,7 @@ All supported Phase 0 variables are documented in `.env.example`:
 - `API_HOST`, `API_PORT`
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `POSTGRES_TEST_URL`
 - `REDIS_PORT`, `REDIS_URL`
+- `INGESTION_CLOCK_SKEW_SECONDS`, `INGESTION_RATE_LIMIT`, `INGESTION_RATE_LIMIT_WINDOW_SECONDS`
 - `WEB_PORT`, `API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`
 
 Compose supplies container-network database and Redis URLs to backend services. Host commands use `DATABASE_URL` and `REDIS_URL` from `.env`.
@@ -91,6 +92,8 @@ docker compose run --rm api alembic upgrade head
 ```
 
 The Phase 0 migration is an empty baseline. Phase 1 adds the core domain schema after that baseline.
+
+Phase 2 adds Integrator connection keys, immutable incoming packages and versions, and the source-package link on `ContentVersion`.
 
 ## Phase 1 core domain
 
@@ -132,7 +135,56 @@ $env:POSTGRES_TEST_URL="postgresql+asyncpg://news_platform:news_platform_dev@loc
 ./.venv/Scripts/python.exe -m pytest
 ```
 
-The tests create and remove only Phase 1 tables inside `news_platform_test`; they do not touch the development database.
+The tests create and remove only Site Platform tables inside `news_platform_test`; they do not touch the development database.
+
+## Phase 2 Integrator receiver
+
+The internal receiver is:
+
+```text
+POST /internal/v1/ingestion/content
+```
+
+It accepts exactly canonical schema `1.0` and `1.1`. Wire payload fields follow `NEWS_INTEGRATOR_INTERFACE.md` and the generated Integrator `CanonicalNewsPackageEnvelope` schema. Required request headers are:
+
+```text
+Idempotency-Key: <package_id>:<package_version>
+X-Integrator-Instance-Id: <instance UUID>
+X-Signing-Key-Id: <key identifier>
+X-Timestamp: <timezone-aware ISO-8601 timestamp>
+X-Signature: <hex HMAC-SHA256>
+```
+
+The HMAC message is the UTF-8 timestamp bytes immediately followed by the exact HTTP request body bytes. The receiver never parses and reserializes the body before signature verification. The default clock-skew allowance is 300 seconds.
+
+Provision a development connection after applying migrations. Supply the secret through the process environment so it is not passed on the command line:
+
+```powershell
+$env:INTEGRATOR_HMAC_SECRET="replace-with-a-development-secret"
+docker compose exec -e INTEGRATOR_HMAC_SECRET api python -m news_platform.modules.ingestion.infrastructure.provision --instance-id 11111111-1111-4111-8111-111111111111 --name "Development Integrator" --key-id dev-active
+Remove-Item Env:INTEGRATOR_HMAC_SECRET
+```
+
+The Phase 2 database stores active and optional previous secrets in PostgreSQL because encryption-at-rest/key-vault infrastructure does not yet exist. Access to that database must be restricted and production deployments must provide storage-level encryption or a secrets adapter before using production credentials. Secrets are never returned or logged.
+
+Successful new versions return HTTP 201 and `status: accepted`; exact duplicates return HTTP 200 and `status: duplicate`. Conflicting bytes for an existing package/version return HTTP 409. Authentication failures return HTTP 401, unsupported/invalid packages return HTTP 422, and rate limiting returns HTTP 429.
+
+Current mapping rules:
+
+- canonical content and primary source provenance map into `ContentItem` and `Source`;
+- every accepted source package gets a distinct `ContentVersion`, whose independent Site `version_number` is allocated separately from `source_revision`;
+- typed categories, topics, structured geographies, reliably typed entities, and media map into Phase 1 models;
+- typed schema 1.1 taxonomy takes precedence; legacy `taxonomy` maps to topics only when typed taxonomy is absent;
+- legacy `regions`, language versions, AI provenance, rights, warnings, and the full validated package remain preserved losslessly in JSONB for later phases;
+- media remains remote metadata only and `rights_hint` does not imply permission to copy it.
+
+Run all PostgreSQL receiver tests:
+
+```powershell
+Set-Location apps/api
+$env:POSTGRES_TEST_URL="postgresql+asyncpg://news_platform:news_platform_dev@localhost:5432/news_platform_test"
+./.venv/Scripts/python.exe -m pytest -q
+```
 
 ## Frontend host development
 

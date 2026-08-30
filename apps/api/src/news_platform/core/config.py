@@ -19,6 +19,9 @@ class Settings(BaseSettings):
         "postgresql+asyncpg://news_platform:news_platform_dev@localhost:5432/news_platform"
     )
     redis_url: str = "redis://localhost:6379/0"
+    ingestion_clock_skew_seconds: int = Field(default=300, ge=1, le=3600)
+    ingestion_rate_limit: int = Field(default=300, ge=0)
+    ingestion_rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
 
 
 @lru_cache

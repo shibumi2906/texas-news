@@ -157,6 +157,9 @@ class ContentVersion(UUIDPrimaryKeyMixin, Base):
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     source_revision: Mapped[int | None] = mapped_column(Integer)
+    incoming_package_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("incoming_package_versions.id", ondelete="RESTRICT"), unique=True
+    )
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     body: Mapped[str | None] = mapped_column(Text)

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from alembic import context
 from news_platform.core.config import get_settings
 from news_platform.infrastructure.database import Base
-from news_platform.modules import models as phase_1_models  # noqa: F401
+from news_platform.modules import models as platform_models  # noqa: F401
 
 config = context.config
 

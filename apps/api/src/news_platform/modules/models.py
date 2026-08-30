@@ -11,6 +11,11 @@ from news_platform.modules.content.domain.models import (
 )
 from news_platform.modules.entities.domain.models import Entity
 from news_platform.modules.geography.domain.models import GeographyNode
+from news_platform.modules.ingestion.domain.models import (
+    IncomingPackage,
+    IncomingPackageVersion,
+    IntegratorConnection,
+)
 from news_platform.modules.media.domain.models import MediaAsset
 from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.taxonomy.domain.models import Category, Topic
@@ -25,6 +30,9 @@ __all__ = [
     "ContentVersion",
     "Entity",
     "GeographyNode",
+    "IncomingPackage",
+    "IncomingPackageVersion",
+    "IntegratorConnection",
     "MediaAsset",
     "Portal",
     "Source",

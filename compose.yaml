@@ -40,6 +40,9 @@ services:
       API_PORT: 8000
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-news_platform}:${POSTGRES_PASSWORD:-news_platform_dev}@postgres:5432/${POSTGRES_DB:-news_platform}
       REDIS_URL: redis://redis:6379/0
+      INGESTION_CLOCK_SKEW_SECONDS: ${INGESTION_CLOCK_SKEW_SECONDS:-300}
+      INGESTION_RATE_LIMIT: ${INGESTION_RATE_LIMIT:-300}
+      INGESTION_RATE_LIMIT_WINDOW_SECONDS: ${INGESTION_RATE_LIMIT_WINDOW_SECONDS:-60}
       PYTHONPATH: /app/src
     command: ["sh", "-c", "alembic upgrade head && uvicorn news_platform.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src"]
     ports:
