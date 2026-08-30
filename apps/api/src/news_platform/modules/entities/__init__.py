@@ -1,0 +1,1 @@
+"""Named-entity domain module."""
