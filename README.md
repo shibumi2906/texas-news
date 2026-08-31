@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 2 adds the production Site-side receiver for the existing News Integrator to the Phase 1 modular-monolith foundation. It accepts the signed canonical package contract, stores immutable incoming versions, maps current source-derived state into the core domain, and remains safe under duplicate and out-of-order delivery. Publication workflows, feeds, users, community, and Site AI functionality are not implemented yet.
+Phase 3 adds Site-side editorial publication to the existing core domain and Integrator receiver. It provides an internal admin API for editing, publication, unpublication, restoration, and scheduling, plus a PostgreSQL-safe scheduled-publication worker and complete editorial audit history. Public feeds, the Texas portal frontend, users, community, and Site AI functionality are not implemented yet.
 
 ## Prerequisites
 
@@ -54,6 +54,7 @@ All supported Phase 0 variables are documented in `.env.example`:
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`, `DATABASE_URL`, `POSTGRES_TEST_URL`
 - `REDIS_PORT`, `REDIS_URL`
 - `INGESTION_CLOCK_SKEW_SECONDS`, `INGESTION_RATE_LIMIT`, `INGESTION_RATE_LIMIT_WINDOW_SECONDS`
+- `EDITORIAL_SCHEDULER_ENABLED`, `EDITORIAL_SCHEDULER_POLL_SECONDS`, `EDITORIAL_SCHEDULER_BATCH_SIZE`
 - `WEB_PORT`, `API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`
 
 Compose supplies container-network database and Redis URLs to backend services. Host commands use `DATABASE_URL` and `REDIS_URL` from `.env`.
@@ -94,6 +95,8 @@ docker compose run --rm api alembic upgrade head
 The Phase 0 migration is an empty baseline. Phase 1 adds the core domain schema after that baseline.
 
 Phase 2 adds Integrator connection keys, immutable incoming packages and versions, and the source-package link on `ContentVersion`.
+
+Phase 3 adds independent upstream/editorial state, scheduling fields, version origin, and the editorial audit log.
 
 ## Phase 1 core domain
 
@@ -178,6 +181,8 @@ Current mapping rules:
 - legacy `regions`, language versions, AI provenance, rights, warnings, and the full validated package remain preserved losslessly in JSONB for later phases;
 - media remains remote metadata only and `rights_hint` does not imply permission to copy it.
 
+After an editorial edit, later upstream versions remain stored and update source provenance and associations, but do not overwrite the current editorial title, subtitle, description, or body. The Integrator `content.lead` maps to Site `subtitle`; both source and editorial versions retain that value in version metadata. The explicit `has_editorial_override` marker preserves this deterministic Phase 3 policy for future conflict handling.
+
 Run all PostgreSQL receiver tests:
 
 ```powershell
@@ -185,6 +190,32 @@ Set-Location apps/api
 $env:POSTGRES_TEST_URL="postgresql+asyncpg://news_platform:news_platform_dev@localhost:5432/news_platform_test"
 ./.venv/Scripts/python.exe -m pytest -q
 ```
+
+## Phase 3 editorial publication
+
+The internal API is rooted at `/api/v1/admin/content`. It supports list and detail reads, `ready`, `publish`, `unpublish`, `schedule`, `cancel-schedule`, `restore`, and an explicit-field `PATCH` for title, subtitle, description, and body. Every request requires an `X-Editorial-Actor` header. This actor identifier exists only for audit attribution; it is not authentication or authorization, which remains deferred to Phase 8.
+
+The implemented transitions are explicit: `received|processing -> ready`, `ready -> scheduled|published`, `scheduled -> ready|published`, `published -> unpublished|retracted`, `unpublished -> scheduled|published|archived`, `archived -> ready|unpublished`, and `retracted -> ready`. Deleted content has no outbound transition. Active upstream `retracted` or `deleted` state blocks publish, schedule, and restore regardless of editorial state.
+
+Restore publishes an editorially unpublished item when its upstream state allows publication. Archived or retracted editorial state restores to `ready`; an active upstream retraction/deletion always wins. Repeating publish for an already published item is idempotent and does not create another audit event or version.
+
+Run the scheduler locally as part of Compose:
+
+```powershell
+docker compose up --build --detach worker
+docker compose logs --follow worker
+```
+
+Example workflow (replace the content UUID):
+
+```powershell
+$headers = @{ "X-Editorial-Actor" = "editor:local" }
+Invoke-RestMethod -Method Post -Headers $headers -ContentType "application/json" -Body "{}" http://localhost:8000/api/v1/admin/content/<id>/ready
+Invoke-RestMethod -Method Post -Headers $headers -ContentType "application/json" -Body '{"reason":"approved"}' http://localhost:8000/api/v1/admin/content/<id>/publish
+Invoke-RestMethod -Method Post -Headers $headers -ContentType "application/json" -Body '{"reason":"hold"}' http://localhost:8000/api/v1/admin/content/<id>/unpublish
+```
+
+Schedule requests use a timezone-aware future `scheduled_at`; the worker polls PostgreSQL, locks due rows with `FOR UPDATE SKIP LOCKED`, rechecks eligibility, and records publication as actor `system:scheduler`. PostgreSQL locking is authoritative, so repeated or concurrent worker execution cannot create duplicate publication events.
 
 ## Frontend host development
 

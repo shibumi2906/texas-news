@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     ingestion_clock_skew_seconds: int = Field(default=300, ge=1, le=3600)
     ingestion_rate_limit: int = Field(default=300, ge=0)
     ingestion_rate_limit_window_seconds: int = Field(default=60, ge=1, le=3600)
+    editorial_scheduler_enabled: bool = True
+    editorial_scheduler_poll_seconds: int = Field(default=10, ge=1, le=3600)
+    editorial_scheduler_batch_size: int = Field(default=50, ge=1, le=500)
 
 
 @lru_cache

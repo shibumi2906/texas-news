@@ -50,6 +50,11 @@ class ContentStatus(StrEnum):
     FAILED = "failed"
 
 
+class ContentVersionOrigin(StrEnum):
+    SOURCE = "source"
+    EDITORIAL = "editorial"
+
+
 class ContentGeographyRelationship(StrEnum):
     PRIMARY = "primary"
     MENTIONED = "mentioned"
@@ -110,6 +115,7 @@ class ContentItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_content_items_source_id", "source_id"),
         Index("ix_content_items_external_id", "external_id"),
         Index("ix_content_items_story_cluster_id", "story_cluster_id"),
+        Index("ix_content_items_scheduled_at", "scheduled_at"),
     )
 
     external_id: Mapped[str | None] = mapped_column(String(255))
@@ -117,6 +123,12 @@ class ContentItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[ContentStatus] = mapped_column(
         content_status_enum(), default=ContentStatus.RECEIVED, nullable=False
     )
+    upstream_status: Mapped[ContentStatus] = mapped_column(
+        content_status_enum(), default=ContentStatus.RECEIVED, nullable=False
+    )
+    has_editorial_override: Mapped[bool] = mapped_column(default=False, nullable=False)
+    scheduled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    site_published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_id: Mapped[UUID | None] = mapped_column(ForeignKey("sources.id", ondelete="SET NULL"))
     original_url: Mapped[str | None] = mapped_column(Text)
     original_language: Mapped[str] = mapped_column(String(35), nullable=False)
@@ -150,6 +162,7 @@ class ContentVersion(UUIDPrimaryKeyMixin, Base):
             "source_revision IS NULL OR source_revision > 0", name="source_revision_positive"
         ),
         Index("ix_content_versions_content_item_id", "content_item_id"),
+        CheckConstraint("origin IN ('source', 'editorial')", name="content_version_origin"),
     )
 
     content_item_id: Mapped[UUID] = mapped_column(
@@ -157,6 +170,9 @@ class ContentVersion(UUIDPrimaryKeyMixin, Base):
     )
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
     source_revision: Mapped[int | None] = mapped_column(Integer)
+    origin: Mapped[str] = mapped_column(
+        String(16), default=ContentVersionOrigin.SOURCE, nullable=False
+    )
     incoming_package_version_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("incoming_package_versions.id", ondelete="RESTRICT"), unique=True
     )

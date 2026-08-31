@@ -23,6 +23,7 @@ from news_platform.modules.content.domain.models import (
     ContentTopic,
     ContentType,
     ContentVersion,
+    ContentVersionOrigin,
     Source,
 )
 from news_platform.modules.entities.domain.models import Entity, EntityType
@@ -209,10 +210,16 @@ class IngestionService:
     ) -> ContentItem:
         content = None
         if incoming_package.content_item_id is not None:
-            content = await self.session.get(ContentItem, incoming_package.content_item_id)
+            content = await self.session.scalar(
+                select(ContentItem)
+                .where(ContentItem.id == incoming_package.content_item_id)
+                .with_for_update()
+            )
         if content is None:
             content = await self.session.scalar(
-                select(ContentItem).where(ContentItem.external_id == str(envelope.package_id))
+                select(ContentItem)
+                .where(ContentItem.external_id == str(envelope.package_id))
+                .with_for_update()
             )
         if content is None:
             primary_source = envelope.sources[0] if envelope.sources else None
@@ -220,11 +227,13 @@ class IngestionService:
                 external_id=str(envelope.package_id),
                 content_type=ContentType.ARTICLE,
                 status=self._content_status(envelope.operation),
+                upstream_status=self._content_status(envelope.operation),
                 source_id=sources[0].id if sources else None,
                 original_url=envelope.content.canonical_url,
                 original_language=envelope.content.language,
                 primary_language=envelope.content.language,
                 title=envelope.content.title,
+                subtitle=envelope.content.lead,
                 description=envelope.content.excerpt or envelope.content.summary,
                 body=envelope.content.body,
                 publication_time=primary_source.published_at if primary_source else None,
@@ -257,11 +266,13 @@ class IngestionService:
                 content_item_id=content.id,
                 version_number=next_version,
                 source_revision=envelope.package_version,
+                origin=ContentVersionOrigin.SOURCE,
                 incoming_package_version_id=incoming_version.id,
                 title=envelope.content.title,
                 description=envelope.content.excerpt or envelope.content.summary,
                 body=envelope.content.body,
                 metadata_={
+                    "subtitle": envelope.content.lead,
                     "package_id": str(envelope.package_id),
                     "schema_version": envelope.schema_version,
                     "operation": envelope.operation,
@@ -287,14 +298,31 @@ class IngestionService:
     ) -> None:
         await self._clear_previous_mappings(content)
         primary_source = envelope.sources[0] if envelope.sources else None
-        content.status = self._content_status(envelope.operation)
+        upstream_status = self._content_status(envelope.operation)
+        previous_effective_status = content.status
+        content.upstream_status = upstream_status
+        editorial_lifecycle = previous_effective_status in {
+            ContentStatus.SCHEDULED,
+            ContentStatus.PUBLISHED,
+            ContentStatus.UNPUBLISHED,
+            ContentStatus.ARCHIVED,
+        }
+        if upstream_status in {ContentStatus.RETRACTED, ContentStatus.DELETED}:
+            content.status = upstream_status
+            content.scheduled_at = None
+        elif previous_effective_status in {ContentStatus.RETRACTED, ContentStatus.DELETED}:
+            content.status = ContentStatus.READY
+        elif not editorial_lifecycle:
+            content.status = ContentStatus.RECEIVED
         content.source_id = sources[0].id if sources else None
         content.original_url = envelope.content.canonical_url
         content.original_language = envelope.content.language
         content.primary_language = envelope.content.language
-        content.title = envelope.content.title
-        content.description = envelope.content.excerpt or envelope.content.summary
-        content.body = envelope.content.body
+        if not content.has_editorial_override:
+            content.title = envelope.content.title
+            content.subtitle = envelope.content.lead
+            content.description = envelope.content.excerpt or envelope.content.summary
+            content.body = envelope.content.body
         content.publication_time = primary_source.published_at if primary_source else None
         content.original_publication_time = primary_source.published_at if primary_source else None
         content.canonical_content_hash = primary_source.content_hash if primary_source else None

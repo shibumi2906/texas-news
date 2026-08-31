@@ -4,6 +4,7 @@ import json
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
@@ -26,8 +27,11 @@ from news_platform.modules.content.domain.models import (
     ContentStatus,
     ContentTopic,
     ContentVersion,
+    ContentVersionOrigin,
     Source,
 )
+from news_platform.modules.editorial.application.service import EditorialService
+from news_platform.modules.editorial.domain.schemas import EditorialEdit
 from news_platform.modules.geography.domain.models import GeographyNode
 from news_platform.modules.ingestion.api.router import router
 from news_platform.modules.ingestion.application.errors import RateLimitError
@@ -122,6 +126,7 @@ def package(
     operation: str = "created",
     schema_version: str = "1.1",
     title: str | None = None,
+    subtitle: str | None = None,
 ) -> dict[str, Any]:
     now = datetime.now(UTC).isoformat()
     payload: dict[str, Any] = {
@@ -139,7 +144,7 @@ def package(
         ),
         "content": {
             "title": title or f"Package title v{version}",
-            "lead": None,
+            "lead": subtitle,
             "excerpt": f"Excerpt v{version}",
             "body": f"Body v{version}",
             "summary": None,
@@ -537,3 +542,113 @@ async def test_invalid_payload_and_transaction_failure_leave_no_partial_state(
     async with session_factory() as session:
         for model in (IncomingPackage, IncomingPackageVersion, ContentItem, ContentVersion, Source):
             assert await session.scalar(select(func.count()).select_from(model)) == 0
+
+
+async def test_upstream_update_preserves_phase_3_editorial_override(
+    client: tuple[httpx.AsyncClient, async_sessionmaker[Any]],
+) -> None:
+    http, session_factory = client
+    assert (await post_package(http, package(subtitle="Source subtitle v1"))).status_code == 201
+    async with session_factory() as session, session.begin():
+        content = await session.scalar(
+            select(ContentItem).where(ContentItem.external_id == str(PACKAGE_ID))
+        )
+        assert content is not None
+        content_id = content.id
+        incoming = await session.scalar(
+            select(IncomingPackage).where(IncomingPackage.package_id == PACKAGE_ID)
+        )
+        first_incoming_version = await session.scalar(
+            select(IncomingPackageVersion).where(
+                IncomingPackageVersion.package_id == PACKAGE_ID,
+                IncomingPackageVersion.package_version == 1,
+            )
+        )
+        assert incoming is not None and first_incoming_version is not None
+        incoming_identity = (
+            incoming.id,
+            incoming.package_id,
+            incoming.integrator_connection_id,
+            incoming.content_item_id,
+        )
+        first_version_history = (
+            first_incoming_version.id,
+            first_incoming_version.body_sha256,
+            deepcopy(first_incoming_version.payload),
+            first_incoming_version.received_at,
+        )
+        await EditorialService(session).edit(
+            content_id,
+            "editor:override-test",
+            EditorialEdit(
+                title="Editorial title",
+                subtitle="Editorial subtitle",
+                description="Editorial description",
+                body="Editorial body",
+                reason="preserve this edit",
+            ),
+        )
+
+    assert (
+        await post_package(
+            http,
+            package(
+                2,
+                operation="updated",
+                title="New upstream title",
+                subtitle="Upstream subtitle v2",
+            ),
+        )
+    ).status_code == 201
+    async with session_factory() as session:
+        stored = await session.get(ContentItem, content_id)
+        versions = (
+            await session.scalars(
+                select(ContentVersion)
+                .where(ContentVersion.content_item_id == content_id)
+                .order_by(ContentVersion.version_number)
+            )
+        ).all()
+        assert stored is not None
+        assert stored.title == "Editorial title"
+        assert stored.subtitle == "Editorial subtitle"
+        assert stored.description == "Editorial description"
+        assert stored.body == "Editorial body"
+        assert stored.has_editorial_override
+        assert [version.origin for version in versions] == [
+            ContentVersionOrigin.SOURCE,
+            ContentVersionOrigin.EDITORIAL,
+            ContentVersionOrigin.SOURCE,
+        ]
+        assert [version.metadata_.get("subtitle") for version in versions] == [
+            "Source subtitle v1",
+            "Editorial subtitle",
+            "Upstream subtitle v2",
+        ]
+        assert versions[-1].title == "New upstream title"
+        incoming = await session.scalar(
+            select(IncomingPackage).where(IncomingPackage.package_id == PACKAGE_ID)
+        )
+        incoming_versions = (
+            await session.scalars(
+                select(IncomingPackageVersion)
+                .where(IncomingPackageVersion.package_id == PACKAGE_ID)
+                .order_by(IncomingPackageVersion.package_version)
+            )
+        ).all()
+        assert incoming is not None
+        assert (
+            incoming.id,
+            incoming.package_id,
+            incoming.integrator_connection_id,
+            incoming.content_item_id,
+        ) == incoming_identity
+        assert incoming.latest_version == 2
+        assert len(incoming_versions) == 2
+        assert (
+            incoming_versions[0].id,
+            incoming_versions[0].body_sha256,
+            incoming_versions[0].payload,
+            incoming_versions[0].received_at,
+        ) == first_version_history
+        assert incoming_versions[1].payload["content"]["lead"] == "Upstream subtitle v2"

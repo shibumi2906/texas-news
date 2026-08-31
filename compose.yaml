@@ -69,11 +69,16 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-news_platform}:${POSTGRES_PASSWORD:-news_platform_dev}@postgres:5432/${POSTGRES_DB:-news_platform}
       REDIS_URL: redis://redis:6379/0
+      EDITORIAL_SCHEDULER_ENABLED: ${EDITORIAL_SCHEDULER_ENABLED:-true}
+      EDITORIAL_SCHEDULER_POLL_SECONDS: ${EDITORIAL_SCHEDULER_POLL_SECONDS:-10}
+      EDITORIAL_SCHEDULER_BATCH_SIZE: ${EDITORIAL_SCHEDULER_BATCH_SIZE:-50}
       PYTHONPATH: /app/src
     command: ["python", "-m", "news_platform.worker"]
     volumes:
       - ./apps/api:/app
     depends_on:
+      api:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       redis:

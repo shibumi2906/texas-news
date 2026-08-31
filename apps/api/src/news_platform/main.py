@@ -10,6 +10,7 @@ from news_platform.core.config import Settings, get_settings
 from news_platform.core.logging import RequestLoggingMiddleware, configure_logging
 from news_platform.infrastructure.database import create_db_engine, create_session_factory
 from news_platform.infrastructure.redis import create_redis_client
+from news_platform.modules.editorial.api.router import router as editorial_router
 from news_platform.modules.ingestion.api.router import router as ingestion_router
 
 
@@ -39,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.add_middleware(RequestLoggingMiddleware)
     application.include_router(health_router)
     application.include_router(ingestion_router)
+    application.include_router(editorial_router)
     return application
 
 
