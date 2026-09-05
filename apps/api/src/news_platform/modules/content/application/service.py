@@ -54,6 +54,8 @@ class ContentService:
 
     async def create(self, data: ContentItemCreate) -> ContentItem:
         values = data.model_dump(exclude={"original_url", "metadata", "first_seen_at"})
+        if values["slug"] is None:
+            del values["slug"]
         if data.first_seen_at is not None:
             values["first_seen_at"] = data.first_seen_at
         content = ContentItem(

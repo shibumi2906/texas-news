@@ -225,6 +225,7 @@ class IngestionService:
             primary_source = envelope.sources[0] if envelope.sources else None
             content = ContentItem(
                 external_id=str(envelope.package_id),
+                slug=self._story_slug(envelope.content.title, envelope.package_id),
                 content_type=ContentType.ARTICLE,
                 status=self._content_status(envelope.operation),
                 upstream_status=self._content_status(envelope.operation),
@@ -612,3 +613,8 @@ class IngestionService:
     @staticmethod
     def _label(slug: str) -> str:
         return slug.replace("-", " ").strip().title()
+
+    @classmethod
+    def _story_slug(cls, title: str, package_id: UUID) -> str:
+        title_slug = cls._slug(title)[:180].rstrip("-") or "story"
+        return f"{title_slug}-{package_id.hex[:12]}"

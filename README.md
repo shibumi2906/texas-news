@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 3 adds Site-side editorial publication to the existing core domain and Integrator receiver. It provides an internal admin API for editing, publication, unpublication, restoration, and scheduling, plus a PostgreSQL-safe scheduled-publication worker and complete editorial audit history. Public feeds, the Texas portal frontend, users, community, and Site AI functionality are not implemented yet.
+Phase 4 adds the first production public vertical slice for the Texas portal. Published Integrator material now flows through the Site domain and editorial lifecycle into typed public homepage, category, and story APIs and a responsive server-rendered Next.js site. Phase 5 feeds/trending algorithms, search, users, community, personalization, and Site AI remain deferred.
 
 ## Prerequisites
 
@@ -97,6 +97,8 @@ The Phase 0 migration is an empty baseline. Phase 1 adds the core domain schema 
 Phase 2 adds Integrator connection keys, immutable incoming packages and versions, and the source-package link on `ContentVersion`.
 
 Phase 3 adds independent upstream/editorial state, scheduling fields, version origin, and the editorial audit log.
+
+Phase 4 adds stable public story slugs. Existing rows receive deterministic UUID-based slugs during migration; newly ingested stories receive a readable title slug with a package-identity suffix.
 
 ## Phase 1 core domain
 
@@ -235,6 +237,22 @@ npm run test:run
 npm run format:check
 npm run build
 ```
+
+## Phase 4 Texas public portal
+
+The public backend is rooted at `/api/v1/portals/{portal_slug}`:
+
+```text
+GET /api/v1/portals/texas/home
+GET /api/v1/portals/texas/categories/{category_slug}?offset=0&limit=20
+GET /api/v1/portals/texas/stories/{story_slug}
+```
+
+All three surfaces use one backend publication policy. A story is public only when its editorial status is `published`, its `site_published_at` is present and not in the future, and its current upstream status is neither `retracted` nor `deleted`. Portal scope is validated by the active portal and its primary geography tree, so Texas includes associated Texas cities and metros without leaking another portal's geography. Ordering is `site_published_at DESC, id ASC` for a stable tie-break.
+
+The homepage supplies the Hero, a Phase 4 latest-published Trending placeholder, configured category sections, and published video highlights. The category API uses bounded offset pagination; cursor feeds, caching, engagement counters, and calculated trending are intentionally deferred to Phase 5.
+
+Next.js reads the API server-side using `API_BASE_URL`. Open <http://localhost:3000> for the Texas homepage, `/<category-slug>` for category pages, and `/story/<story-slug>` for story pages. Canonical URLs originate in backend portal configuration (`seo_settings.canonical_base_url` when set, otherwise the portal domain), and the frontend renders page metadata, Open Graph data, and NewsArticle JSON-LD from the public response.
 
 ## Health verification
 

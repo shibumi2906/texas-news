@@ -4,7 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     CheckConstraint,
@@ -119,6 +119,9 @@ class ContentItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     external_id: Mapped[str | None] = mapped_column(String(255))
+    slug: Mapped[str] = mapped_column(
+        String(220), unique=True, nullable=False, default=lambda: f"story-{uuid4().hex}"
+    )
     content_type: Mapped[ContentType] = mapped_column(content_type_enum(), nullable=False)
     status: Mapped[ContentStatus] = mapped_column(
         content_status_enum(), default=ContentStatus.RECEIVED, nullable=False

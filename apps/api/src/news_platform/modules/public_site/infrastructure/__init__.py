@@ -1,0 +1,1 @@
+"""Public portal persistence adapters."""

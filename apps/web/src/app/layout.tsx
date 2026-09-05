@@ -4,15 +4,18 @@ import type { ReactNode } from "react";
 import "./styles.css";
 
 export const metadata: Metadata = {
-  title: "Local Entertainment News Platform",
-  description: "Site Platform foundation",
+  title: {
+    default: "Texas Entertainment Daily",
+    template: "%s | Texas Entertainment Daily",
+  },
+  description: "Entertainment and culture from across Texas.",
 };
 
 export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en-US">
       <body>{children}</body>
     </html>
   );

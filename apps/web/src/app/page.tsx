@@ -1,11 +1,26 @@
-export default function Home() {
-  return (
-    <main className="shell">
-      <section aria-labelledby="platform-title" className="panel">
-        <p className="eyebrow">Phase 0</p>
-        <h1 id="platform-title">Local Entertainment News Platform</h1>
-        <p>The web application foundation is running.</p>
-      </section>
-    </main>
-  );
+import type { Metadata } from "next";
+
+import { HomeView } from "@/components/public-site";
+import { getHomepage } from "@/lib/public-api";
+
+export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const data = await getHomepage();
+  return {
+    title: "Texas Entertainment Daily",
+    description:
+      "Entertainment, culture, sports, food and local stories from across Texas.",
+    alternates: { canonical: data.portal.canonical_url },
+    openGraph: {
+      title: "Texas Entertainment Daily",
+      description: "The entertainment beat across the Lone Star State.",
+      url: data.portal.canonical_url,
+      type: "website",
+    },
+  };
+}
+
+export default async function Home() {
+  return <HomeView data={await getHomepage()} />;
 }

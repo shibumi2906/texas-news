@@ -26,6 +26,7 @@ class SourceCreate(BaseModel):
 
 class ContentItemCreate(BaseModel):
     external_id: str | None = Field(default=None, max_length=255)
+    slug: str | None = Field(default=None, max_length=220, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     content_type: ContentType
     status: ContentStatus = ContentStatus.RECEIVED
     source_id: UUID | None = None

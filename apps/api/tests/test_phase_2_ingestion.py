@@ -32,8 +32,8 @@ from news_platform.modules.content.domain.models import (
 )
 from news_platform.modules.editorial.application.service import EditorialService
 from news_platform.modules.editorial.domain.schemas import EditorialEdit
-from news_platform.modules.geography.domain.models import GeographyNode
-from news_platform.modules.ingestion.api.router import router
+from news_platform.modules.geography.domain.models import GeographyNode, GeographyType
+from news_platform.modules.ingestion.api.router import router as ingestion_router
 from news_platform.modules.ingestion.application.errors import RateLimitError
 from news_platform.modules.ingestion.application.rate_limit import enforce_ingestion_rate_limit
 from news_platform.modules.ingestion.application.security import sign_request
@@ -44,6 +44,8 @@ from news_platform.modules.ingestion.domain.models import (
     IntegratorConnection,
 )
 from news_platform.modules.media.domain.models import MediaAsset
+from news_platform.modules.portals.domain.models import Portal, PortalStatus
+from news_platform.modules.public_site.api.router import router as public_site_router
 from news_platform.modules.taxonomy.domain.models import Category, Topic
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
@@ -113,7 +115,8 @@ async def client(
         ingestion_clock_skew_seconds=300,
         ingestion_rate_limit=0,
     )
-    app.include_router(router)
+    app.include_router(ingestion_router)
+    app.include_router(public_site_router)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as test_client:
@@ -652,3 +655,104 @@ async def test_upstream_update_preserves_phase_3_editorial_override(
             incoming_versions[0].received_at,
         ) == first_version_history
         assert incoming_versions[1].payload["content"]["lead"] == "Upstream subtitle v2"
+
+
+async def test_public_slug_is_stable_across_upstream_and_editorial_title_changes(
+    client: tuple[httpx.AsyncClient, async_sessionmaker[Any]],
+) -> None:
+    http, session_factory = client
+    assert (
+        await post_package(http, package(1, title="Original public headline"))
+    ).status_code == 201
+    async with session_factory() as session:
+        content = await session.scalar(
+            select(ContentItem).where(ContentItem.external_id == str(PACKAGE_ID))
+        )
+        assert content is not None
+        content_id = content.id
+        issued_slug = content.slug
+
+    assert (
+        await post_package(http, package(2, operation="updated", title="Updated headline"))
+    ).status_code == 201
+    async with session_factory() as session:
+        stored = await session.get(ContentItem, content_id)
+        assert stored is not None and stored.slug == issued_slug
+
+    assert (
+        await post_package(http, package(3, operation="corrected", title="Corrected headline"))
+    ).status_code == 201
+    async with session_factory() as session, session.begin():
+        stored = await session.get(ContentItem, content_id)
+        assert stored is not None and stored.slug == issued_slug
+        await EditorialService(session).edit(
+            content_id,
+            "editor:slug-stability",
+            EditorialEdit(title="Editorial headline", reason="acceptance regression"),
+        )
+        assert stored.slug == issued_slug
+
+    async with session_factory() as session:
+        stored = await session.get(ContentItem, content_id)
+        assert stored is not None
+        assert stored.title == "Editorial headline"
+        assert stored.slug == issued_slug
+
+
+@pytest.mark.parametrize("operation", ["retracted", "deleted"])
+async def test_newer_upstream_removal_hides_previously_published_story_everywhere(
+    client: tuple[httpx.AsyncClient, async_sessionmaker[Any]], operation: str
+) -> None:
+    http, session_factory = client
+    assert (await post_package(http, package(1, title="Published Texas story"))).status_code == 201
+    async with session_factory() as session, session.begin():
+        content = await session.scalar(
+            select(ContentItem).where(ContentItem.external_id == str(PACKAGE_ID))
+        )
+        texas = await session.scalar(
+            select(GeographyNode).where(
+                GeographyNode.type == GeographyType.STATE_OR_PROVINCE,
+                GeographyNode.name == "Texas",
+            )
+        )
+        assert content is not None and texas is not None
+        session.add(
+            Portal(
+                slug="texas",
+                name="Texas Entertainment Daily",
+                domain="texas.example",
+                status=PortalStatus.ACTIVE,
+                primary_geography_id=texas.id,
+                default_language="en",
+                supported_languages=["en"],
+                timezone="America/Chicago",
+                branding={},
+                category_settings={"enabled": ["sports"]},
+                ranking_settings={},
+                ai_settings={},
+                advertising_settings={"enabled": False},
+                seo_settings={},
+                feature_flags={},
+            )
+        )
+        editorial = EditorialService(session)
+        await editorial.mark_ready(content.id, "editor:acceptance")
+        await editorial.publish(content.id, "editor:acceptance")
+        story_slug = content.slug
+
+    assert (await http.get("/api/v1/portals/texas/home")).json()["hero"]["slug"] == story_slug
+    category_before = await http.get("/api/v1/portals/texas/categories/sports")
+    assert [item["slug"] for item in category_before.json()["items"]] == [story_slug]
+    assert (await http.get(f"/api/v1/portals/texas/stories/{story_slug}")).status_code == 200
+
+    assert (
+        await post_package(http, package(2, operation=operation, title="Removed Texas story"))
+    ).status_code == 201
+
+    homepage_after = await http.get("/api/v1/portals/texas/home")
+    category_after = await http.get("/api/v1/portals/texas/categories/sports")
+    story_after = await http.get(f"/api/v1/portals/texas/stories/{story_slug}")
+    assert homepage_after.status_code == 200 and homepage_after.json()["hero"] is None
+    assert category_after.status_code == 200 and category_after.json()["items"] == []
+    assert story_after.status_code == 404
+    assert story_after.json()["detail"]["code"] == "PUBLIC_RESOURCE_NOT_FOUND"
