@@ -43,6 +43,7 @@ services:
       INGESTION_CLOCK_SKEW_SECONDS: ${INGESTION_CLOCK_SKEW_SECONDS:-300}
       INGESTION_RATE_LIMIT: ${INGESTION_RATE_LIMIT:-300}
       INGESTION_RATE_LIMIT_WINDOW_SECONDS: ${INGESTION_RATE_LIMIT_WINDOW_SECONDS:-60}
+      FEED_CACHE_TTL_SECONDS: ${FEED_CACHE_TTL_SECONDS:-60}
       PYTHONPATH: /app/src
     command: ["sh", "-c", "alembic upgrade head && uvicorn news_platform.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src"]
     ports:

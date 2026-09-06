@@ -90,12 +90,13 @@ describe("public detail pages", () => {
       <CategoryView
         data={{
           portal,
-          category: { name: "Music", slug: "music" },
+          feed: "category",
+          scope: "music",
+          label: "Music",
+          language: "en",
           canonical_url: "https://texas.example/music",
           items: [summary],
-          total: 20,
-          offset: 0,
-          limit: 12,
+          next_cursor: "opaque-cursor",
         }}
       />,
     );
@@ -104,7 +105,7 @@ describe("public detail pages", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Older →" })).toHaveAttribute(
       "href",
-      "/music?offset=12",
+      "/music?cursor=opaque-cursor",
     );
   });
 

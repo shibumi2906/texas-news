@@ -11,6 +11,7 @@ from news_platform.core.logging import configure_logging
 from news_platform.infrastructure.database import create_db_engine, create_session_factory
 from news_platform.infrastructure.redis import create_redis_client
 from news_platform.modules.editorial.application.service import EditorialService
+from news_platform.modules.feeds.infrastructure.cache import invalidate_public_feed_cache
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ async def run() -> None:
                             settings.editorial_scheduler_batch_size
                         )
                     if published:
+                        await invalidate_public_feed_cache(redis_client)
                         logger.info("scheduled_content_published", extra={"result": published})
                 except Exception:
                     logger.exception("editorial_scheduler_iteration_failed")

@@ -50,14 +50,15 @@ export type Homepage = {
   video_highlights: StorySummary[];
 };
 
-export type CategoryPageData = {
+export type FeedPageData = {
   portal: Portal;
-  category: Category;
+  feed: "home" | "latest" | "category" | "local" | "trending";
+  scope: string | null;
+  label: string;
+  language: string;
   canonical_url: string;
   items: StorySummary[];
-  total: number;
-  offset: number;
-  limit: number;
+  next_cursor: string | null;
 };
 
 export type Story = StorySummary & {
@@ -100,11 +101,36 @@ export const getHomepage = cache(() =>
   request<Homepage>("/api/v1/portals/texas/home"),
 );
 
-export const getCategory = cache((slug: string, offset = 0, limit = 12) =>
-  request<CategoryPageData>(
-    `/api/v1/portals/texas/categories/${encodeURIComponent(slug)}?offset=${offset}&limit=${limit}`,
-  ),
+type FeedKind = "home" | "latest" | "trending" | "category" | "local";
+
+function feedPath(kind: FeedKind, scope?: string): string {
+  if (kind === "category")
+    return `categories/${encodeURIComponent(scope ?? "")}`;
+  if (kind === "local") return `local/${encodeURIComponent(scope ?? "")}`;
+  return kind;
+}
+
+export const getFeed = cache(
+  (kind: FeedKind, scope?: string, cursor?: string, limit = 12) => {
+    const query = new URLSearchParams({ language: "en", limit: String(limit) });
+    if (cursor) query.set("cursor", cursor);
+    return request<FeedPageData>(
+      `/api/v1/portals/texas/feeds/${feedPath(kind, scope)}?${query}`,
+    );
+  },
 );
+
+export const getCategory = (slug: string, cursor?: string) =>
+  getFeed("category", slug, cursor);
+
+export const getLatest = (cursor?: string) =>
+  getFeed("latest", undefined, cursor);
+
+export const getTrending = (cursor?: string) =>
+  getFeed("trending", undefined, cursor);
+
+export const getLocal = (geography: string, cursor?: string) =>
+  getFeed("local", geography, cursor);
 
 export const getStory = cache((slug: string) =>
   request<Story>(`/api/v1/portals/texas/stories/${encodeURIComponent(slug)}`),

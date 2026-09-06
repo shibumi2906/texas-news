@@ -11,6 +11,8 @@ from news_platform.core.logging import RequestLoggingMiddleware, configure_loggi
 from news_platform.infrastructure.database import create_db_engine, create_session_factory
 from news_platform.infrastructure.redis import create_redis_client
 from news_platform.modules.editorial.api.router import router as editorial_router
+from news_platform.modules.engagement.api.router import router as engagement_router
+from news_platform.modules.feeds.api.router import router as feeds_router
 from news_platform.modules.ingestion.api.router import router as ingestion_router
 from news_platform.modules.public_site.api.router import router as public_site_router
 
@@ -42,6 +44,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(health_router)
     application.include_router(ingestion_router)
     application.include_router(editorial_router)
+    application.include_router(engagement_router)
+    application.include_router(feeds_router)
     application.include_router(public_site_router)
     return application
 

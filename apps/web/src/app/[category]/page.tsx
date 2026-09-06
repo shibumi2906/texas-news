@@ -8,15 +8,14 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ category: string }>;
-  searchParams: Promise<{ offset?: string }>;
+  searchParams: Promise<{ cursor?: string }>;
 };
 
 async function loadCategory(props: Props) {
   const { category } = await props.params;
-  const rawOffset = (await props.searchParams).offset;
-  const offset = Math.max(0, Number.parseInt(rawOffset ?? "0", 10) || 0);
+  const cursor = (await props.searchParams).cursor;
   try {
-    return await getCategory(category, offset);
+    return await getCategory(category, cursor);
   } catch (error) {
     if (error instanceof PublicApiError && error.status === 404) notFound();
     throw error;
@@ -25,13 +24,13 @@ async function loadCategory(props: Props) {
 
 export async function generateMetadata(props: Props): Promise<Metadata> {
   const data = await loadCategory(props);
-  const description = `The latest ${data.category.name.toLowerCase()} stories from across Texas.`;
+  const description = `The latest ${data.label.toLowerCase()} stories from across Texas.`;
   return {
-    title: data.category.name,
+    title: data.label,
     description,
     alternates: { canonical: data.canonical_url },
     openGraph: {
-      title: data.category.name,
+      title: data.label,
       description,
       url: data.canonical_url,
     },

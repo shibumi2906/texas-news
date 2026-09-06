@@ -10,6 +10,10 @@ from news_platform.modules.content.domain.models import (
     Source,
 )
 from news_platform.modules.editorial.domain.models import EditorialAuditLog
+from news_platform.modules.engagement.domain.models import (
+    ContentEngagementCounter,
+    EngagementCounterUpdate,
+)
 from news_platform.modules.entities.domain.models import Entity
 from news_platform.modules.geography.domain.models import GeographyNode
 from news_platform.modules.ingestion.domain.models import (
@@ -25,12 +29,14 @@ __all__ = [
     "Category",
     "ContentCategory",
     "ContentEntity",
+    "ContentEngagementCounter",
     "ContentGeography",
     "ContentItem",
     "ContentTopic",
     "ContentVersion",
     "Entity",
     "EditorialAuditLog",
+    "EngagementCounterUpdate",
     "GeographyNode",
     "IncomingPackage",
     "IncomingPackageVersion",

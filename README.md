@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 4 adds the first production public vertical slice for the Texas portal. Published Integrator material now flows through the Site domain and editorial lifecycle into typed public homepage, category, and story APIs and a responsive server-rendered Next.js site. Phase 5 feeds/trending algorithms, search, users, community, personalization, and Site AI remain deferred.
+Phase 5 adds portal-scoped Home, Latest, Category, Local, and Trending feeds to the Phase 4 public vertical slice. The backend owns cursor pagination, aggregate engagement counters, deterministic ranking, and short-lived Redis caching. Search, behavioral-event collection, users, community, personalization, and Site AI remain deferred.
 
 ## Prerequisites
 
@@ -55,6 +55,7 @@ All supported Phase 0 variables are documented in `.env.example`:
 - `REDIS_PORT`, `REDIS_URL`
 - `INGESTION_CLOCK_SKEW_SECONDS`, `INGESTION_RATE_LIMIT`, `INGESTION_RATE_LIMIT_WINDOW_SECONDS`
 - `EDITORIAL_SCHEDULER_ENABLED`, `EDITORIAL_SCHEDULER_POLL_SECONDS`, `EDITORIAL_SCHEDULER_BATCH_SIZE`
+- `FEED_CACHE_TTL_SECONDS`
 - `WEB_PORT`, `API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`
 
 Compose supplies container-network database and Redis URLs to backend services. Host commands use `DATABASE_URL` and `REDIS_URL` from `.env`.
@@ -99,6 +100,8 @@ Phase 2 adds Integrator connection keys, immutable incoming packages and version
 Phase 3 adds independent upstream/editorial state, scheduling fields, version origin, and the editorial audit log.
 
 Phase 4 adds stable public story slugs. Existing rows receive deterministic UUID-based slugs during migration; newly ingested stories receive a readable title slug with a package-identity suffix.
+
+Phase 5 adds PostgreSQL aggregate engagement counters and idempotency receipts. Redis remains a disposable read cache rather than an authoritative lifecycle or counter store.
 
 ## Phase 1 core domain
 
@@ -250,9 +253,29 @@ GET /api/v1/portals/texas/stories/{story_slug}
 
 All three surfaces use one backend publication policy. A story is public only when its editorial status is `published`, its `site_published_at` is present and not in the future, and its current upstream status is neither `retracted` nor `deleted`. Portal scope is validated by the active portal and its primary geography tree, so Texas includes associated Texas cities and metros without leaking another portal's geography. Ordering is `site_published_at DESC, id ASC` for a stable tie-break.
 
-The homepage supplies the Hero, a Phase 4 latest-published Trending placeholder, configured category sections, and published video highlights. The category API uses bounded offset pagination; cursor feeds, caching, engagement counters, and calculated trending are intentionally deferred to Phase 5.
+The homepage supplies the Hero, calculated Trending stories, configured category sections, and published video highlights. The original category API remains available for Phase 4 compatibility; Phase 5 listing pages use cursor feeds.
 
 Next.js reads the API server-side using `API_BASE_URL`. Open <http://localhost:3000> for the Texas homepage, `/<category-slug>` for category pages, and `/story/<story-slug>` for story pages. Canonical URLs originate in backend portal configuration (`seo_settings.canonical_base_url` when set, otherwise the portal domain), and the frontend renders page metadata, Open Graph data, and NewsArticle JSON-LD from the public response.
+
+## Phase 5 feeds and trending
+
+All feed requests require `language` and `limit`; `cursor` is omitted for the first page and returned as an opaque `next_cursor` when more content exists:
+
+```text
+GET /api/v1/portals/{portal_slug}/feeds/home
+GET /api/v1/portals/{portal_slug}/feeds/latest
+GET /api/v1/portals/{portal_slug}/feeds/trending
+GET /api/v1/portals/{portal_slug}/feeds/categories/{category_slug}
+GET /api/v1/portals/{portal_slug}/feeds/local/{geography_slug}
+```
+
+Chronological feeds order by `site_published_at DESC, id DESC`. Trending combines aggregate engagement, CTR, view velocity, freshness decay, local relevance, and content quality, then uses publication time and content ID as stable tie-breakers. Weights are read from `Portal.ranking_settings.trending`, with deterministic defaults when no override exists.
+
+The internal aggregate-counter boundary is `POST /internal/v1/engagement/counters`. It requires an `Idempotency-Key` header and atomically applies a positive metric delta in PostgreSQL. It intentionally does not collect user/session behavioral events; that event pipeline belongs to Phase 7.
+
+Feed responses are cached in Redis for `FEED_CACHE_TTL_SECONDS`. Cache keys include a generation epoch, portal, feed, scope, language, page size, and cursor. Successful ingestion, editorial mutations, scheduled publication, and applied counter changes advance the epoch after the PostgreSQL transaction commits, so old cached generations cannot re-expose retracted, deleted, or unpublished content.
+
+The Texas frontend exposes `/latest`, `/trending`, `/local/texas`, cursor-backed category pages, and the existing homepage/story pages.
 
 ## Health verification
 

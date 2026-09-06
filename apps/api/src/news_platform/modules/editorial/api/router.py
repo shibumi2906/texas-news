@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from news_platform.infrastructure.database import get_db_session
@@ -17,6 +17,7 @@ from news_platform.modules.editorial.domain.schemas import (
     ScheduleCommand,
 )
 from news_platform.modules.editorial.infrastructure.repository import EditorialRepository
+from news_platform.modules.feeds.infrastructure.cache import invalidate_public_feed_cache
 
 router = APIRouter(prefix="/api/v1/admin/content", tags=["editorial-admin"])
 DatabaseSession = Depends(get_db_session)
@@ -80,6 +81,7 @@ async def get_content(
 
 
 async def execute(
+    request: Request,
     session: AsyncSession,
     operation: str,
     content_id: UUID,
@@ -109,74 +111,82 @@ async def execute(
                 raise RuntimeError("unsupported editorial operation")
     except EditorialError as exc:
         raise_editorial_error(exc)
+    await invalidate_public_feed_cache(getattr(request.app.state, "redis", None))
     return ContentAdminView.model_validate(content)
 
 
 @router.post("/{content_id}/ready", response_model=ContentAdminView)
 async def mark_ready(
+    request: Request,
     content_id: UUID,
     payload: EditorialCommand,
     session: AsyncSession = DatabaseSession,
     actor: str = Actor,
 ) -> ContentAdminView:
-    return await execute(session, "ready", content_id, actor, payload)
+    return await execute(request, session, "ready", content_id, actor, payload)
 
 
 @router.post("/{content_id}/publish", response_model=ContentAdminView)
 async def publish(
+    request: Request,
     content_id: UUID,
     payload: EditorialCommand,
     session: AsyncSession = DatabaseSession,
     actor: str = Actor,
 ) -> ContentAdminView:
-    return await execute(session, "publish", content_id, actor, payload)
+    return await execute(request, session, "publish", content_id, actor, payload)
 
 
 @router.post("/{content_id}/unpublish", response_model=ContentAdminView)
 async def unpublish(
+    request: Request,
     content_id: UUID,
     payload: EditorialCommand,
     session: AsyncSession = DatabaseSession,
     actor: str = Actor,
 ) -> ContentAdminView:
-    return await execute(session, "unpublish", content_id, actor, payload)
+    return await execute(request, session, "unpublish", content_id, actor, payload)
 
 
 @router.post("/{content_id}/schedule", response_model=ContentAdminView)
 async def schedule(
+    request: Request,
     content_id: UUID,
     payload: ScheduleCommand,
     session: AsyncSession = DatabaseSession,
     actor: str = Actor,
 ) -> ContentAdminView:
-    return await execute(session, "schedule", content_id, actor, payload)
+    return await execute(request, session, "schedule", content_id, actor, payload)
 
 
 @router.post("/{content_id}/cancel-schedule", response_model=ContentAdminView)
 async def cancel_schedule(
+    request: Request,
     content_id: UUID,
     payload: EditorialCommand,
     session: AsyncSession = DatabaseSession,
     actor: str = Actor,
 ) -> ContentAdminView:
-    return await execute(session, "cancel_schedule", content_id, actor, payload)
+    return await execute(request, session, "cancel_schedule", content_id, actor, payload)
 
 
 @router.post("/{content_id}/restore", response_model=ContentAdminView)
 async def restore(
+    request: Request,
     content_id: UUID,
     payload: EditorialCommand,
     session: AsyncSession = DatabaseSession,
     actor: str = Actor,
 ) -> ContentAdminView:
-    return await execute(session, "restore", content_id, actor, payload)
+    return await execute(request, session, "restore", content_id, actor, payload)
 
 
 @router.patch("/{content_id}", response_model=ContentAdminView)
 async def edit(
+    request: Request,
     content_id: UUID,
     payload: EditorialEdit,
     session: AsyncSession = DatabaseSession,
     actor: str = Actor,
 ) -> ContentAdminView:
-    return await execute(session, "edit", content_id, actor, payload)
+    return await execute(request, session, "edit", content_id, actor, payload)

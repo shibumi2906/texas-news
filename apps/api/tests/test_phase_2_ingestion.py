@@ -32,6 +32,7 @@ from news_platform.modules.content.domain.models import (
 )
 from news_platform.modules.editorial.application.service import EditorialService
 from news_platform.modules.editorial.domain.schemas import EditorialEdit
+from news_platform.modules.feeds.api.router import router as feeds_router
 from news_platform.modules.geography.domain.models import GeographyNode, GeographyType
 from news_platform.modules.ingestion.api.router import router as ingestion_router
 from news_platform.modules.ingestion.application.errors import RateLimitError
@@ -61,11 +62,20 @@ PREVIOUS_SECRET = "phase-two-previous-test-secret"
 
 class FakeRedis:
     def __init__(self) -> None:
-        self.values: dict[str, int] = {}
+        self.values: dict[str, str | int] = {}
 
     async def incr(self, key: str) -> int:
-        self.values[key] = self.values.get(key, 0) + 1
-        return self.values[key]
+        value = int(self.values.get(key, 0)) + 1
+        self.values[key] = value
+        return value
+
+    async def get(self, key: str) -> str | int | None:
+        return self.values.get(key)
+
+    async def set(self, key: str, value: str, *, ex: int) -> bool:
+        assert ex > 0
+        self.values[key] = value
+        return True
 
     async def expire(self, _key: str, _seconds: int) -> bool:
         return True
@@ -117,6 +127,7 @@ async def client(
     )
     app.include_router(ingestion_router)
     app.include_router(public_site_router)
+    app.include_router(feeds_router)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as test_client:
@@ -744,6 +755,8 @@ async def test_newer_upstream_removal_hides_previously_published_story_everywher
     category_before = await http.get("/api/v1/portals/texas/categories/sports")
     assert [item["slug"] for item in category_before.json()["items"]] == [story_slug]
     assert (await http.get(f"/api/v1/portals/texas/stories/{story_slug}")).status_code == 200
+    feed_before = await http.get("/api/v1/portals/texas/feeds/latest?language=en&limit=20")
+    assert [item["slug"] for item in feed_before.json()["items"]] == [story_slug]
 
     assert (
         await post_package(http, package(2, operation=operation, title="Removed Texas story"))
@@ -752,7 +765,9 @@ async def test_newer_upstream_removal_hides_previously_published_story_everywher
     homepage_after = await http.get("/api/v1/portals/texas/home")
     category_after = await http.get("/api/v1/portals/texas/categories/sports")
     story_after = await http.get(f"/api/v1/portals/texas/stories/{story_slug}")
+    feed_after = await http.get("/api/v1/portals/texas/feeds/latest?language=en&limit=20")
     assert homepage_after.status_code == 200 and homepage_after.json()["hero"] is None
     assert category_after.status_code == 200 and category_after.json()["items"] == []
     assert story_after.status_code == 404
     assert story_after.json()["detail"]["code"] == "PUBLIC_RESOURCE_NOT_FOUND"
+    assert feed_after.status_code == 200 and feed_after.json()["items"] == []

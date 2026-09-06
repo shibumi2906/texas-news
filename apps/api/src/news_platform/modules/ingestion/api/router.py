@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from news_platform.infrastructure.database import get_db_session
+from news_platform.modules.feeds.infrastructure.cache import invalidate_public_feed_cache
 from news_platform.modules.ingestion.application.errors import IngestionError
 from news_platform.modules.ingestion.application.service import IngestionService
 from news_platform.modules.ingestion.domain.schemas import IncomingPackageReceipt
@@ -83,6 +84,8 @@ async def receive_content(
             status_code=exc.status_code,
             detail={"code": exc.code, "message": str(exc)},
         ) from exc
+
+    await invalidate_public_feed_cache(request.app.state.redis)
 
     response.status_code = 201 if receipt.status == "accepted" else 200
     validated_payload = json.loads(body)

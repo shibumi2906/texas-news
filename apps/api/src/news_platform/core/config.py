@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     editorial_scheduler_enabled: bool = True
     editorial_scheduler_poll_seconds: int = Field(default=10, ge=1, le=3600)
     editorial_scheduler_batch_size: int = Field(default=50, ge=1, le=500)
+    feed_cache_ttl_seconds: int = Field(default=60, ge=1, le=3600)
 
 
 @lru_cache

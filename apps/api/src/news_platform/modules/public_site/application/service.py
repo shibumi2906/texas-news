@@ -134,6 +134,9 @@ class PublicSiteService:
             ],
         )
 
+    def portal_view(self, portal: Portal, categories: list[Category]) -> PublicPortal:
+        return self._portal_view(portal, categories)
+
     def _summary(self, portal: Portal, record: PublicContentRecord) -> PublicStorySummary:
         content = record.content
         if content.site_published_at is None:
@@ -184,6 +187,9 @@ class PublicSiteService:
                 for media in record.media
             ],
         )
+
+    def story_summary(self, portal: Portal, record: PublicContentRecord) -> PublicStorySummary:
+        return self._summary(portal, record)
 
     @staticmethod
     def _portal_base_url(portal: Portal) -> str:

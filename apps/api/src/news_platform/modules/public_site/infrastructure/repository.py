@@ -89,10 +89,16 @@ class PublicSiteRepository:
             )
         )
 
+    def portal_scope(self, portal: Portal) -> Any:
+        return self._portal_scope(portal)
+
     def _eligible_statement(self, portal: Portal, now: datetime) -> Any:
         return select(ContentItem).where(
             *public_content_predicates(now), self._portal_scope(portal)
         )
+
+    def eligible_statement(self, portal: Portal, now: datetime) -> Any:
+        return self._eligible_statement(portal, now)
 
     async def list_content(
         self,
@@ -264,3 +270,6 @@ class PublicSiteRepository:
         for media in media_rows:
             records[media.content_item_id].media.append(media)
         return [records[content.id] for content in contents]
+
+    async def hydrate(self, contents: list[ContentItem]) -> list[PublicContentRecord]:
+        return await self._hydrate(contents)

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import type {
-  CategoryPageData,
+  FeedPageData,
   Homepage,
   Media,
   Portal,
@@ -77,6 +77,9 @@ export function SiteHeader({ portal }: { portal: Portal }) {
       <nav className="category-nav" aria-label="Primary navigation">
         <div className="page-width nav-scroll">
           <Link href="/">Home</Link>
+          <Link href="/latest">Latest</Link>
+          <Link href="/trending">Trending</Link>
+          <Link href="/local/texas">Local</Link>
           {portal.categories.map((category) => (
             <Link href={`/${category.slug}`} key={category.slug}>
               {category.name}
@@ -221,18 +224,24 @@ export function HomeView({ data }: { data: Homepage }) {
   );
 }
 
-export function CategoryView({ data }: { data: CategoryPageData }) {
-  const previousOffset = Math.max(0, data.offset - data.limit);
-  const nextOffset = data.offset + data.limit;
+export function FeedView({
+  data,
+  title = data.label,
+  deck = `The latest published ${data.label.toLowerCase()} stories.`,
+  path,
+}: {
+  data: FeedPageData;
+  title?: string;
+  deck?: string;
+  path: string;
+}) {
   return (
     <>
       <SiteHeader portal={data.portal} />
       <main className="page-width listing-page">
         <div className="page-kicker">Explore Texas</div>
-        <h1>{data.category.name}</h1>
-        <p className="page-deck">
-          The latest published {data.category.name.toLowerCase()} stories.
-        </p>
+        <h1>{title}</h1>
+        <p className="page-deck">{deck}</p>
         {data.items.length ? (
           <div className="listing-grid">
             {data.items.map((story) => (
@@ -244,16 +253,12 @@ export function CategoryView({ data }: { data: CategoryPageData }) {
             No published stories in this section yet.
           </p>
         )}
-        <nav className="pagination" aria-label="Category pages">
-          {data.offset > 0 ? (
-            <Link href={`/${data.category.slug}?offset=${previousOffset}`}>
-              ← Newer
-            </Link>
-          ) : (
-            <span />
-          )}
-          {nextOffset < data.total ? (
-            <Link href={`/${data.category.slug}?offset=${nextOffset}`}>
+        <nav className="pagination" aria-label={`${title} feed pages`}>
+          <span />
+          {data.next_cursor ? (
+            <Link
+              href={`${path}?cursor=${encodeURIComponent(data.next_cursor)}`}
+            >
               Older →
             </Link>
           ) : null}
@@ -262,6 +267,10 @@ export function CategoryView({ data }: { data: CategoryPageData }) {
       <SiteFooter portal={data.portal} />
     </>
   );
+}
+
+export function CategoryView({ data }: { data: FeedPageData }) {
+  return <FeedView data={data} path={`/${data.scope ?? ""}`} />;
 }
 
 function ShareControls({ story }: { story: Story }) {
