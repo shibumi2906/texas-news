@@ -58,6 +58,7 @@ async def search_db(database: Any) -> AsyncIterator[Any]:  # noqa: F811
         # its generated representation and triggers, rather than copying its SQL.
         connection.execute(text("DROP TABLE search_generation"))
         connection.execute(text("ALTER TABLE content_items DROP COLUMN search_vector CASCADE"))
+        connection.execute(text("DROP FUNCTION IF EXISTS advance_search_generation() CASCADE"))
         with Operations.context(MigrationContext.configure(connection)):
             revision["upgrade"]()
 
