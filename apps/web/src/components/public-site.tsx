@@ -78,6 +78,7 @@ export function SiteHeader({ portal }: { portal: Portal }) {
         <div className="page-width nav-scroll">
           <Link href="/">Home</Link>
           <Link href="/latest">Latest</Link>
+          <Link href="/search">Search</Link>
           <Link href="/trending">Trending</Link>
           <Link href="/local/texas">Local</Link>
           {portal.categories.map((category) => (

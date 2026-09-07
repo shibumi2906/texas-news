@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 5 adds portal-scoped Home, Latest, Category, Local, and Trending feeds to the Phase 4 public vertical slice. The backend owns cursor pagination, aggregate engagement counters, deterministic ranking, and short-lived Redis caching. Search, behavioral-event collection, users, community, personalization, and Site AI remain deferred.
+Phase 6 adds PostgreSQL keyword and entity search with portal, language, geography, category, and date boundaries. It builds on the Phase 4 public read model and preserves Phase 5 feeds, trending, counters, and Redis semantics. Behavioral events, users, community, personalization, and Site AI remain deferred.
 
 ## Prerequisites
 
@@ -322,3 +322,26 @@ references/     Visual references for later frontend phases
 ```
 
 The Texas homepage reference is preserved for Phase 4. It is not implemented or copied in Phase 0.
+
+## Phase 6 search
+
+Open `/search` on the Texas frontend. The GET form supports keywords, entity name/alias/slug, location slug, enabled category, and inclusive UTC publication dates. It preserves filters when following the next-results link and provides a restart action for expired cursors. Search pages are dynamic, use no-store API fetches, and are marked noindex.
+
+```text
+GET /api/v1/portals/texas/search?language=en&q=mavericks&limit=20
+GET /api/v1/portals/texas/search?language=en&entity=dallas-mavericks&geography=dallas&category=sports&date_from=2026-09-01&date_to=2026-09-06
+```
+
+`language` is required and must be enabled for the active portal. Optional fields are `q` (max 200 characters), `entity`, `category`, `geography` (max 180 each), `date_from`, `date_to` (ISO dates), `limit` (1–50, default 20), and `cursor`. Empty keywords browse matching public stories; punctuation-only or stopword-only keywords return no matches. Queries use plain words with AND semantics, without exposing SQL or tsquery syntax. All filters combine with AND. Entity matches use exact slug or words in the canonical name/aliases. Geography includes descendants and must belong to the portal tree. Date boundaries apply to `site_published_at` in UTC; both dates are inclusive.
+
+Migration `0007_phase_6_search` adds a stored generated `tsvector` and GIN index on effective title (A), subtitle/description (B), and body (D). The language base `en` selects English, `es` Spanish, and other supported languages use PostgreSQL `simple`; exact content-language isolation still applies. No translation or language switching is introduced. Generated vectors update transactionally on editorial and source changes without reading ingestion envelopes or version history.
+
+Results order by `ts_rank_cd` rounded to six decimals DESC, `site_published_at DESC`, then content UUID DESC. With no keyword, rank is zero. Hydration reuses the public read model in bounded batches, with at most `limit + 1` candidate rows and no per-story queries. Responses contain public story summaries, never vectors or ingestion payloads. The `SearchBackend` protocol isolates the adapter and can be implemented by a future OpenSearch backend.
+
+An opaque versioned cursor binds to portal ID, normalized query, language, every filter, a fixed publication cutoff, rank, publication timestamp, content ID, and PostgreSQL search generation. Changing page size is allowed. A cursor from another context or generation returns HTTP 400 `INVALID_SEARCH_CURSOR`; clients must restart. Invalid fields return 422; unknown portal, unsupported language, disabled/unknown category, or out-of-portal geography returns 404.
+
+The migration also adds a singleton `search_generation` row and statement triggers on content, its searchable associations, entities, categories, geography nodes, and portals. Changes advance the generation in the same PostgreSQL transaction. Search holds a shared generation-row lock until its bounded read transaction completes, so a concurrent writer cannot commit a new ranking universe during a page read. This generation is deliberately global: even another portal's search-relevant write can require restarting traversal. This favors consistency at current scale; the row serializes search-relevant writers and may warrant partitioning at higher write volume. Rollbacks do not invalidate cursors. Redis is not involved in search; the Phase 5 cache/cursor implementation is unchanged.
+
+Search reuses centralized public eligibility: published editorial state, nonfuture `site_published_at`, and no upstream retraction/deletion. Every page is re-read from PostgreSQL. New publications after the cursor cutoff are excluded; changes to existing publication eligibility invalidate traversal.
+
+FTS and pagination integration tests are in `apps/api/tests/test_phase_6_search.py`; frontend tests are in `apps/web/src/app/search/page.test.tsx`. See `docs/phase-6-acceptance.md` for acceptance verification.

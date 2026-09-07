@@ -23,6 +23,7 @@ from news_platform.modules.ingestion.domain.models import (
 )
 from news_platform.modules.media.domain.models import MediaAsset
 from news_platform.modules.portals.domain.models import Portal
+from news_platform.modules.search.domain.models import SearchGeneration
 from news_platform.modules.taxonomy.domain.models import Category, Topic
 
 __all__ = [
@@ -44,5 +45,6 @@ __all__ = [
     "MediaAsset",
     "Portal",
     "Source",
+    "SearchGeneration",
     "Topic",
 ]

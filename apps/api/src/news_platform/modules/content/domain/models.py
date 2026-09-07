@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     CheckConstraint,
+    Computed,
     DateTime,
     Enum,
     ForeignKey,
@@ -19,7 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from news_platform.infrastructure.database import Base
@@ -116,6 +117,28 @@ class ContentItem(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_content_items_external_id", "external_id"),
         Index("ix_content_items_story_cluster_id", "story_cluster_id"),
         Index("ix_content_items_scheduled_at", "scheduled_at"),
+        Index("ix_content_items_search_vector", "search_vector", postgresql_using="gin"),
+    )
+
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "setweight(to_tsvector((CASE WHEN split_part(primary_language, '-', 1) = "
+            "'en' THEN 'english'::regconfig WHEN split_part(primary_language, '-', 1) = "
+            "'es' THEN 'spanish'::regconfig ELSE 'simple'::regconfig END), "
+            "coalesce(title, '')), 'A') || setweight(to_tsvector((CASE WHEN "
+            "split_part(primary_language, '-', 1) = 'en' THEN 'english'::regconfig WHEN "
+            "split_part(primary_language, '-', 1) = 'es' THEN 'spanish'::regconfig ELSE "
+            "'simple'::regconfig END), coalesce(subtitle, '')), 'B') || "
+            "setweight(to_tsvector((CASE WHEN split_part(primary_language, '-', 1) = "
+            "'en' THEN 'english'::regconfig WHEN split_part(primary_language, '-', 1) = "
+            "'es' THEN 'spanish'::regconfig ELSE 'simple'::regconfig END), "
+            "coalesce(description, '')), 'B') || setweight(to_tsvector((CASE WHEN "
+            "split_part(primary_language, '-', 1) = 'en' THEN 'english'::regconfig WHEN "
+            "split_part(primary_language, '-', 1) = 'es' THEN 'spanish'::regconfig ELSE "
+            "'simple'::regconfig END), coalesce(body, '')), 'D')",
+            persisted=True,
+        ),
     )
 
     external_id: Mapped[str | None] = mapped_column(String(255))

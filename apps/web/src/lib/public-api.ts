@@ -135,3 +135,14 @@ export const getLocal = (geography: string, cursor?: string) =>
 export const getStory = cache((slug: string) =>
   request<Story>(`/api/v1/portals/texas/stories/${encodeURIComponent(slug)}`),
 );
+
+export type SearchPageData = {
+  portal: Portal;
+  language: string;
+  query: string;
+  items: StorySummary[];
+  next_cursor: string | null;
+};
+
+export const getSearch = (params: URLSearchParams) =>
+  request<SearchPageData>(`/api/v1/portals/texas/search?${params}`);

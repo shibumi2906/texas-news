@@ -15,6 +15,7 @@ from news_platform.modules.engagement.api.router import router as engagement_rou
 from news_platform.modules.feeds.api.router import router as feeds_router
 from news_platform.modules.ingestion.api.router import router as ingestion_router
 from news_platform.modules.public_site.api.router import router as public_site_router
+from news_platform.modules.search.api.router import router as search_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -47,6 +48,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(engagement_router)
     application.include_router(feeds_router)
     application.include_router(public_site_router)
+    application.include_router(search_router)
     return application
 
 

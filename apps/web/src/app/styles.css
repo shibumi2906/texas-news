@@ -699,3 +699,31 @@ img {
     transition-duration: 0.01ms !important;
   }
 }
+
+.search-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin: 2rem 0;
+  align-items: end;
+}
+.search-form label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+.search-form input,
+.search-form select,
+.search-form button {
+  width: 100%;
+  min-width: 0;
+  padding: 0.7rem;
+  font: inherit;
+  border: 1px solid #aeb5bd;
+  border-radius: 4px;
+}
+.search-form button {
+  background: #143452;
+  color: white;
+  cursor: pointer;
+}
