@@ -1,6 +1,14 @@
 """Import all Phase 1 models so SQLAlchemy metadata is complete."""
 
 from news_platform.modules.analytics.domain.models import BehaviorEvent, BehaviorEventAggregation
+from news_platform.modules.community.domain.models import (
+    Comment,
+    CommentReport,
+    Follow,
+    ModerationAuditLog,
+    Reaction,
+    Save,
+)
 from news_platform.modules.content.domain.models import (
     ContentCategory,
     ContentEntity,
@@ -26,11 +34,15 @@ from news_platform.modules.media.domain.models import MediaAsset
 from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.search.domain.models import SearchGeneration
 from news_platform.modules.taxonomy.domain.models import Category, Topic
+from news_platform.modules.users.domain.models import AuthSession, User, UserIdentity, UserProfile
 
 __all__ = [
     "BehaviorEvent",
     "BehaviorEventAggregation",
     "Category",
+    "AuthSession",
+    "Comment",
+    "CommentReport",
     "ContentCategory",
     "ContentEntity",
     "ContentEngagementCounter",
@@ -39,6 +51,7 @@ __all__ = [
     "ContentTopic",
     "ContentVersion",
     "Entity",
+    "Follow",
     "EditorialAuditLog",
     "EngagementCounterUpdate",
     "GeographyNode",
@@ -46,8 +59,14 @@ __all__ = [
     "IncomingPackageVersion",
     "IntegratorConnection",
     "MediaAsset",
+    "ModerationAuditLog",
     "Portal",
+    "Reaction",
+    "Save",
     "Source",
     "SearchGeneration",
     "Topic",
+    "User",
+    "UserIdentity",
+    "UserProfile",
 ]

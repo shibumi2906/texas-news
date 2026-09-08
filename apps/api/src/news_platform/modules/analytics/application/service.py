@@ -88,7 +88,7 @@ class AnalyticsIngestionService:
             .values(
                 id=payload.id,
                 portal_id=portal.id,
-                user_id=payload.user_id,
+                user_id=None,
                 anonymous_id=payload.anonymous_id,
                 session_id=payload.session_id,
                 event_type=payload.event_type.value,
@@ -138,7 +138,7 @@ class AnalyticsIngestionService:
     ) -> bool:
         return (
             existing.portal_id == portal_id
-            and existing.user_id == payload.user_id
+            and existing.user_id is None
             and existing.anonymous_id == payload.anonymous_id
             and existing.session_id == payload.session_id
             and existing.event_type == payload.event_type.value

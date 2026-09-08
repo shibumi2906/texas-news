@@ -31,6 +31,12 @@ class Settings(BaseSettings):
     analytics_worker_enabled: bool = True
     analytics_worker_poll_seconds: int = Field(default=5, ge=1, le=3600)
     analytics_worker_batch_size: int = Field(default=100, ge=1, le=1000)
+    auth_session_hours: int = Field(default=168, ge=1, le=8760)
+    auth_login_rate_limit: int = Field(default=10, ge=0, le=1000)
+    auth_rate_limit_window_seconds: int = Field(default=300, ge=1, le=86400)
+    auth_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    community_rate_limit: int = Field(default=30, ge=0, le=10000)
+    community_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86400)
 
 
 @lru_cache

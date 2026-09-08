@@ -560,6 +560,86 @@ img {
   margin-top: 55px;
 }
 
+.community-panel {
+  max-width: 760px;
+  margin: 60px auto 0;
+  padding: 26px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.community-heading,
+.community-actions,
+.community-account,
+.comment-list li > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.community-heading h2 {
+  margin: 6px 0;
+  font-size: 28px;
+}
+.community-panel button {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  cursor: pointer;
+}
+.auth-form,
+.comment-form {
+  display: grid;
+  gap: 10px;
+  margin: 22px 0;
+}
+.auth-form input,
+.profile-form input,
+.comment-form textarea {
+  width: 100%;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #07131e;
+  color: var(--ink);
+}
+.comment-form textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+.text-button {
+  color: var(--accent) !important;
+  background: transparent !important;
+}
+.comment-list {
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.comment-list li {
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+}
+.comment-list li.reply {
+  margin-left: 36px;
+}
+.comment-list time {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.comment-list p {
+  line-height: 1.55;
+}
+.community-notice {
+  color: var(--muted);
+}
+
 .related-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

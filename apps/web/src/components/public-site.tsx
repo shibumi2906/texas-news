@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { CommunityPanel } from "@/components/community";
+
 import type {
   FeedPageData,
   Homepage,
@@ -356,6 +358,7 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
               <span key={entity.slug}>{entity.name}</span>
             ))}
           </footer>
+          <CommunityPanel storySlug={story.slug} entities={story.entities} />
         </article>
         {story.related.length ? (
           <aside className="related-stories">

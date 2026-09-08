@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 7 adds privacy-bounded behavioral-event collection and a retry-safe PostgreSQL aggregation pipeline for Trending. It preserves the Phase 0–6 ingestion, editorial, public visibility, feeds, search, and Redis consistency boundaries. Users, community, personalization, recommendations, and Site AI remain deferred.
+Phase 8 adds portal-scoped accounts, profiles, sessions, comments, replies, reactions, reports, saves, follows, and moderation status. It preserves the Phase 0–7 ingestion, editorial, public visibility, feeds, search, analytics, and Redis consistency boundaries. Personalization, recommendations, notifications, and Site AI remain deferred.
 
 ## Prerequisites
 
@@ -356,10 +356,18 @@ The public collection boundary is:
 POST /api/v1/portals/{portal_slug}/analytics/events
 ```
 
-It accepts `impression`, `click`, `content_open`, `scroll`, `video_start`, `watch_time`, `completion`, `share`, and `search`. Each event carries a client-generated UUID, session identifier, anonymous or future user identifier, timezone-aware timestamp, optional content/entity/geography references, and a small event-specific properties object. Raw queries and arbitrary properties are rejected so the analytics store does not become an accidental personal-data sink.
+It accepts `impression`, `click`, `content_open`, `scroll`, `video_start`, `watch_time`, `completion`, `share`, and `search`. Each event carries a client-generated UUID, anonymous/session identifiers, timezone-aware timestamp, optional content/entity/geography references, and a small event-specific properties object. Raw queries, user IDs, and arbitrary properties are rejected so the analytics store cannot impersonate an account or become an accidental personal-data sink.
 
 Content events require content that is currently public inside the active portal. Geography references must be inside that portal's hierarchy. Timestamps may be at most seven days old or five minutes in the future by default. Exact UUID replay returns `duplicate`; reusing a UUID for different data returns `EVENT_ID_CONFLICT`.
 
 Raw `behavior_events` are immutable. The existing worker claims unaggregated rows with `FOR UPDATE SKIP LOCKED`, writes separate aggregation receipts, and maps impressions, clicks, content opens, watch time, completions, and shares through the Phase 5 idempotent engagement service. Scroll, video start, and search remain durable analytics without changing current Trending inputs.
 
 Ranking updates create a transactional PostgreSQL invalidation outbox. The worker advances the Redis feed generation and then marks those receipts delivered. Redis failure leaves the outbox pending for retry; replay cannot double-count PostgreSQL counters, and an uncertain Redis delivery can only produce an extra harmless generation advance. Redis remains a cache, not the event or aggregate authority.
+
+## Phase 8 users and community
+
+Email registration and login use provider identities so Google, Apple, or another provider can be linked later without changing the user model. Passwords use salted `scrypt`; opaque session tokens are stored only as SHA-256 digests. The API sets host-only HttpOnly session cookies and a session-bound CSRF cookie, enforces an origin allowlist plus `X-CSRF-Token` on mutations, expires/revokes sessions, and applies Redis login/comment/reaction rate limits. Roles are `user`, `moderator`, `editor`, `admin`, and `system`; only moderator/admin sessions can change comment status.
+
+Public community routes live under `/api/v1/portals/{portal_slug}/community`. Anonymous readers can list visible comments. Authenticated users can create idempotent UUID-keyed comments/replies, edit or soft-remove only their own comments, select one reaction per story or comment, report a visible comment once, toggle saves, and follow public story entities/topics or in-portal geography. The story page exposes registration/login, profile editing, comments, reply/like/reaction/report, save, and entity-follow controls through a same-origin Next.js rewrite.
+
+Every content interaction reuses the centralized public eligibility policy and session portal; hidden, unpublished, retracted, deleted, cross-portal, or disabled-community resources are not reachable. PostgreSQL is authoritative. Unique constraints plus transaction-scoped advisory locks make retries and concurrent toggles deterministic, while engagement counts change in the same transaction as their source records. Moderation changes are audited. New authenticated community behavior events use only the authenticated server identity and never alter or link historical anonymous events.

@@ -2,7 +2,7 @@ import { cache } from "react";
 
 export type Category = { name: string; slug: string };
 export type Geography = { name: string; slug: string; type: string };
-export type Entity = { name: string; slug: string; type: string };
+export type Entity = { id: string; name: string; slug: string; type: string };
 export type Source = { name: string; url: string | null };
 export type Media = {
   type: string;

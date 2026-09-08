@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from news_platform.modules.analytics.domain.models import BehaviorEventType
 
@@ -33,8 +33,9 @@ EVENT_PROPERTIES = {
 
 
 class BehaviorEventCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     id: UUID
-    user_id: UUID | None = None
     anonymous_id: str | None = Field(
         default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$"
     )
@@ -48,8 +49,10 @@ class BehaviorEventCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_event(self) -> BehaviorEventCreate:
-        if self.user_id is None and self.anonymous_id is None:
-            raise ValueError("user_id or anonymous_id is required")
+        if self.event_type not in EVENT_PROPERTIES:
+            raise ValueError("event type is server generated")
+        if self.anonymous_id is None:
+            raise ValueError("anonymous_id is required")
         if self.timestamp.tzinfo is None or self.timestamp.utcoffset() is None:
             raise ValueError("timestamp must include a timezone")
         if self.event_type in CONTENT_EVENTS and self.content_id is None:

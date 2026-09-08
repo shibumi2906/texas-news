@@ -104,6 +104,7 @@ class PublicSiteService:
             original_url=record.content.original_url,
             entities=[
                 PublicEntity(
+                    id=entity.id,
                     name=entity.canonical_name,
                     slug=entity.slug,
                     type=entity.type.value,

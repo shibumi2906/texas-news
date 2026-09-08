@@ -23,6 +23,11 @@ class BehaviorEventType(StrEnum):
     COMPLETION = "completion"
     SHARE = "share"
     SEARCH = "search"
+    LIKE = "like"
+    REACTION = "reaction"
+    COMMENT = "comment"
+    SAVE = "save"
+    FOLLOW = "follow"
 
 
 EVENT_TYPES = tuple(event_type.value for event_type in BehaviorEventType)

@@ -21,6 +21,7 @@ class PublicGeography(BaseModel):
 
 
 class PublicEntity(BaseModel):
+    id: UUID
     name: str
     slug: str
     type: str

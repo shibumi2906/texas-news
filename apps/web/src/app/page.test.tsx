@@ -115,7 +115,14 @@ describe("public detail pages", () => {
       portal,
       body: "Opening paragraph.\n\nSecond paragraph.",
       original_url: "https://wire.example/austin-music",
-      entities: [{ name: "Austin Band", slug: "austin-band", type: "artist" }],
+      entities: [
+        {
+          id: "00000000-0000-0000-0000-000000000099",
+          name: "Austin Band",
+          slug: "austin-band",
+          type: "artist",
+        },
+      ],
       seo: {},
       related: [{ ...summary, id: "3", title: "More live music" }],
     };
