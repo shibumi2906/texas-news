@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     editorial_scheduler_poll_seconds: int = Field(default=10, ge=1, le=3600)
     editorial_scheduler_batch_size: int = Field(default=50, ge=1, le=500)
     feed_cache_ttl_seconds: int = Field(default=60, ge=1, le=3600)
+    analytics_event_max_age_days: int = Field(default=7, ge=1, le=90)
+    analytics_future_skew_seconds: int = Field(default=300, ge=0, le=3600)
+    analytics_worker_enabled: bool = True
+    analytics_worker_poll_seconds: int = Field(default=5, ge=1, le=3600)
+    analytics_worker_batch_size: int = Field(default=100, ge=1, le=1000)
 
 
 @lru_cache

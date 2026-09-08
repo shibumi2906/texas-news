@@ -1,13 +1,13 @@
-# Platform architecture through Phase 3
+# Platform architecture through Phase 7
 
 The Site Platform begins as a modular monolith in one monorepo:
 
 - `apps/api` owns backend application logic and infrastructure adapters.
 - `apps/web` is a server-capable Next.js frontend and is not authoritative for business rules.
 - `packages/shared` is reserved for intentionally shared contracts.
-- PostgreSQL is the future authoritative persistent store.
+- PostgreSQL is the authoritative persistent store.
 - Redis is limited to ephemeral infrastructure concerns.
-- The `worker` Compose service runs only the Phase 3 scheduled-publication poller after verifying PostgreSQL and Redis connectivity.
+- The `worker` Compose service runs scheduled publication and Phase 7 behavioral aggregation after verifying PostgreSQL and Redis connectivity.
 
 Phase 1 adds explicit `portals`, `geography`, `taxonomy`, `entities`, `content`, and `media` module boundaries. Each exposes domain, application, infrastructure, and API layers as needed. The API layers intentionally expose no HTTP content surface yet; repositories and application services provide the Phase 1 operations.
 
@@ -25,4 +25,10 @@ The internal `/api/v1/admin/content` API provides only the operations needed for
 
 Scheduled publication is represented directly on `ContentItem`. The existing worker selects due rows in bounded batches with `FOR UPDATE SKIP LOCKED` and calls the same publication rules used by manual commands. It rechecks title/version/upstream eligibility at execution, writes audit records as `system:scheduler`, and safely cancels invalid jobs. Redis remains a connectivity dependency but is not used as the source of scheduling correctness.
 
-The Site still does not implement Integrator retries, replay control APIs, delivery DLQ, media downloading, public feeds, the Texas frontend, or later-phase user/community/AI behavior.
+Phase 4 adds the centralized public-visibility policy and Texas read model. Phase 5 adds cursor feeds, PostgreSQL engagement counters, deterministic Trending, and generation-isolated Redis caching. Phase 6 adds PostgreSQL full-text search behind a backend abstraction with transactional cursor generation.
+
+Phase 7 adds immutable `BehaviorEvent` rows and separate aggregation receipts. The public analytics endpoint validates active portal scope, current content visibility, bounded client timestamps, opaque identities, and event-specific property allowlists. Client event UUIDs provide exact replay semantics without storing request IPs, user agents, raw search queries, or arbitrary properties.
+
+The worker claims raw events with PostgreSQL row locks and `SKIP LOCKED`, then applies ranking-relevant deltas through the existing idempotent engagement service in the same transaction as each aggregation receipt. A durable pending-invalidation marker bridges committed PostgreSQL counters to Redis feed-generation invalidation; Redis outages are retryable and cannot double-count engagement.
+
+The Site still defers Integrator replay-control tooling, media downloading, authentication, users, community, personalization, recommendations, notifications, advertising, AI, full admin frontend, and later-phase media UX.

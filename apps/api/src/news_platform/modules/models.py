@@ -1,5 +1,6 @@
 """Import all Phase 1 models so SQLAlchemy metadata is complete."""
 
+from news_platform.modules.analytics.domain.models import BehaviorEvent, BehaviorEventAggregation
 from news_platform.modules.content.domain.models import (
     ContentCategory,
     ContentEntity,
@@ -27,6 +28,8 @@ from news_platform.modules.search.domain.models import SearchGeneration
 from news_platform.modules.taxonomy.domain.models import Category, Topic
 
 __all__ = [
+    "BehaviorEvent",
+    "BehaviorEventAggregation",
     "Category",
     "ContentCategory",
     "ContentEntity",

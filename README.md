@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 6 adds PostgreSQL keyword and entity search with portal, language, geography, category, and date boundaries. It builds on the Phase 4 public read model and preserves Phase 5 feeds, trending, counters, and Redis semantics. Behavioral events, users, community, personalization, and Site AI remain deferred.
+Phase 7 adds privacy-bounded behavioral-event collection and a retry-safe PostgreSQL aggregation pipeline for Trending. It preserves the Phase 0–6 ingestion, editorial, public visibility, feeds, search, and Redis consistency boundaries. Users, community, personalization, recommendations, and Site AI remain deferred.
 
 ## Prerequisites
 
@@ -56,6 +56,8 @@ All supported Phase 0 variables are documented in `.env.example`:
 - `INGESTION_CLOCK_SKEW_SECONDS`, `INGESTION_RATE_LIMIT`, `INGESTION_RATE_LIMIT_WINDOW_SECONDS`
 - `EDITORIAL_SCHEDULER_ENABLED`, `EDITORIAL_SCHEDULER_POLL_SECONDS`, `EDITORIAL_SCHEDULER_BATCH_SIZE`
 - `FEED_CACHE_TTL_SECONDS`
+- `ANALYTICS_EVENT_MAX_AGE_DAYS`, `ANALYTICS_FUTURE_SKEW_SECONDS`
+- `ANALYTICS_WORKER_ENABLED`, `ANALYTICS_WORKER_POLL_SECONDS`, `ANALYTICS_WORKER_BATCH_SIZE`
 - `WEB_PORT`, `API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`
 
 Compose supplies container-network database and Redis URLs to backend services. Host commands use `DATABASE_URL` and `REDIS_URL` from `.env`.
@@ -345,3 +347,19 @@ The migration also adds a singleton `search_generation` row and statement trigge
 Search reuses centralized public eligibility: published editorial state, nonfuture `site_published_at`, and no upstream retraction/deletion. Every page is re-read from PostgreSQL. New publications after the cursor cutoff are excluded; changes to existing publication eligibility invalidate traversal.
 
 FTS and pagination integration tests are in `apps/api/tests/test_phase_6_search.py`; frontend tests are in `apps/web/src/app/search/page.test.tsx`. See `docs/phase-6-acceptance.md` for acceptance verification.
+
+## Phase 7 analytics and behavioral events
+
+The public collection boundary is:
+
+```text
+POST /api/v1/portals/{portal_slug}/analytics/events
+```
+
+It accepts `impression`, `click`, `content_open`, `scroll`, `video_start`, `watch_time`, `completion`, `share`, and `search`. Each event carries a client-generated UUID, session identifier, anonymous or future user identifier, timezone-aware timestamp, optional content/entity/geography references, and a small event-specific properties object. Raw queries and arbitrary properties are rejected so the analytics store does not become an accidental personal-data sink.
+
+Content events require content that is currently public inside the active portal. Geography references must be inside that portal's hierarchy. Timestamps may be at most seven days old or five minutes in the future by default. Exact UUID replay returns `duplicate`; reusing a UUID for different data returns `EVENT_ID_CONFLICT`.
+
+Raw `behavior_events` are immutable. The existing worker claims unaggregated rows with `FOR UPDATE SKIP LOCKED`, writes separate aggregation receipts, and maps impressions, clicks, content opens, watch time, completions, and shares through the Phase 5 idempotent engagement service. Scroll, video start, and search remain durable analytics without changing current Trending inputs.
+
+Ranking updates create a transactional PostgreSQL invalidation outbox. The worker advances the Redis feed generation and then marks those receipts delivered. Redis failure leaves the outbox pending for retry; replay cannot double-count PostgreSQL counters, and an uncertain Redis delivery can only produce an extra harmless generation advance. Redis remains a cache, not the event or aggregate authority.
