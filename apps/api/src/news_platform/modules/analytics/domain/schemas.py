@@ -32,14 +32,10 @@ EVENT_PROPERTIES = {
 }
 
 
-class BehaviorEventCreate(BaseModel):
+class BehaviorEventBase(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: UUID
-    anonymous_id: str | None = Field(
-        default=None, min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$"
-    )
-    session_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
     event_type: BehaviorEventType
     content_id: UUID | None = None
     entity_id: UUID | None = None
@@ -48,11 +44,9 @@ class BehaviorEventCreate(BaseModel):
     properties: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def validate_event(self) -> BehaviorEventCreate:
+    def validate_event(self) -> BehaviorEventBase:
         if self.event_type not in EVENT_PROPERTIES:
             raise ValueError("event type is server generated")
-        if self.anonymous_id is None:
-            raise ValueError("anonymous_id is required")
         if self.timestamp.tzinfo is None or self.timestamp.utcoffset() is None:
             raise ValueError("timestamp must include a timezone")
         if self.event_type in CONTENT_EVENTS and self.content_id is None:
@@ -96,6 +90,15 @@ class BehaviorEventCreate(BaseModel):
             value = self.properties.get("seconds")
             if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= 86_400:
                 raise ValueError("watch_time requires integer seconds from 1 to 86400")
+
+
+class BehaviorEventCreate(BehaviorEventBase):
+    anonymous_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+    session_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
+
+
+class AuthenticatedBehaviorEventCreate(BehaviorEventBase):
+    """A future authenticated event; actor and session are derived from the cookie session."""
 
 
 class BehaviorEventReceipt(BaseModel):

@@ -15,6 +15,7 @@ from news_platform.modules.analytics.domain.models import (
 )
 from news_platform.modules.analytics.domain.schemas import (
     AggregationBatchResult,
+    AuthenticatedBehaviorEventCreate,
     BehaviorEventCreate,
     BehaviorEventReceipt,
     InvalidationBatchResult,
@@ -27,6 +28,7 @@ from news_platform.modules.feeds.infrastructure.cache import CACHE_EPOCH_KEY
 from news_platform.modules.geography.domain.models import GeographyNode
 from news_platform.modules.portals.domain.models import Portal, PortalStatus
 from news_platform.modules.public_site.infrastructure.repository import PublicSiteRepository
+from news_platform.modules.users.application.service import AuthenticatedUser
 
 
 class AnalyticsResourceNotFoundError(Exception):
@@ -112,6 +114,86 @@ class AnalyticsIngestionService:
                 "event id was already used for a different event"
             )
         return BehaviorEventReceipt(id=payload.id, status="duplicate")
+
+    async def collect_authenticated(
+        self, auth: AuthenticatedUser, payload: AuthenticatedBehaviorEventCreate
+    ) -> BehaviorEventReceipt:
+        occurred_at = payload.timestamp.astimezone(UTC)
+        await self._validate(auth.portal, payload, occurred_at)
+        inserted = await self.session.scalar(
+            postgresql_insert(BehaviorEvent)
+            .values(
+                id=payload.id,
+                portal_id=auth.portal.id,
+                user_id=auth.user.id,
+                anonymous_id=None,
+                session_id=str(auth.session.id),
+                event_type=payload.event_type.value,
+                content_id=payload.content_id,
+                entity_id=payload.entity_id,
+                geography_id=payload.geography_id,
+                timestamp=occurred_at,
+                properties=payload.properties,
+            )
+            .on_conflict_do_nothing(index_elements=[BehaviorEvent.id])
+            .returning(BehaviorEvent.id)
+        )
+        if inserted is not None:
+            return BehaviorEventReceipt(id=payload.id, status="accepted")
+        existing = await self.session.get(BehaviorEvent, payload.id)
+        if existing is None or not self._same_authenticated_event(
+            existing, auth, payload, occurred_at
+        ):
+            raise AnalyticsIdempotencyConflictError(
+                "event id was already used for a different event"
+            )
+        return BehaviorEventReceipt(id=payload.id, status="duplicate")
+
+    async def _validate(
+        self,
+        portal: Portal,
+        payload: BehaviorEventCreate | AuthenticatedBehaviorEventCreate,
+        occurred_at: datetime,
+    ) -> None:
+        if occurred_at < self.now - self.max_age or occurred_at > self.now + self.future_skew:
+            raise AnalyticsTimestampError("event timestamp is outside the accepted window")
+        if payload.content_id is not None:
+            content = await self.session.scalar(
+                PublicSiteRepository(self.session)
+                .eligible_statement(portal, self.now)
+                .where(ContentItem.id == payload.content_id)
+            )
+            if content is None:
+                raise AnalyticsResourceNotFoundError("public content not found in portal")
+        if (
+            payload.entity_id is not None
+            and await self.session.get(Entity, payload.entity_id) is None
+        ):
+            raise AnalyticsResourceNotFoundError("entity not found")
+        if payload.geography_id is not None and not await self._geography_in_portal(
+            portal, payload.geography_id
+        ):
+            raise AnalyticsResourceNotFoundError("geography not found in portal")
+
+    @staticmethod
+    def _same_authenticated_event(
+        existing: BehaviorEvent,
+        auth: AuthenticatedUser,
+        payload: AuthenticatedBehaviorEventCreate,
+        occurred_at: datetime,
+    ) -> bool:
+        return (
+            existing.portal_id == auth.portal.id
+            and existing.user_id == auth.user.id
+            and existing.anonymous_id is None
+            and existing.session_id == str(auth.session.id)
+            and existing.event_type == payload.event_type.value
+            and existing.content_id == payload.content_id
+            and existing.entity_id == payload.entity_id
+            and existing.geography_id == payload.geography_id
+            and existing.timestamp == occurred_at
+            and existing.properties == payload.properties
+        )
 
     async def _geography_in_portal(self, portal: Portal, geography_id: UUID) -> bool:
         if portal.primary_geography_id is None:

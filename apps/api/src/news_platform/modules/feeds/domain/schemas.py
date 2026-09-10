@@ -11,6 +11,8 @@ class FeedKind(StrEnum):
     CATEGORY = "category"
     LOCAL = "local"
     TRENDING = "trending"
+    FOR_YOU = "for_you"
+    FOLLOWING = "following"
 
 
 class PublicFeedPage(BaseModel):

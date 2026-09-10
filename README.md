@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 8 adds portal-scoped accounts, profiles, sessions, comments, replies, reactions, reports, saves, follows, and moderation status. It preserves the Phase 0–7 ingestion, editorial, public visibility, feeds, search, analytics, and Redis consistency boundaries. Personalization, recommendations, notifications, and Site AI remain deferred.
+Phase 9 adds portal-scoped For You and Following feeds, explicit user interests, and deterministic behavioral affinity scoring. It preserves the Phase 0–8 ingestion, editorial, public visibility, feeds, search, analytics, authentication, community, and Redis consistency boundaries. Notifications and Site AI remain deferred.
 
 ## Prerequisites
 
@@ -371,3 +371,11 @@ Email registration and login use provider identities so Google, Apple, or anothe
 Public community routes live under `/api/v1/portals/{portal_slug}/community`. Anonymous readers can list visible comments. Authenticated users can create idempotent UUID-keyed comments/replies, edit or soft-remove only their own comments, select one reaction per story or comment, report a visible comment once, toggle saves, and follow public story entities/topics or in-portal geography. The story page exposes registration/login, profile editing, comments, reply/like/reaction/report, save, and entity-follow controls through a same-origin Next.js rewrite.
 
 Every content interaction reuses the centralized public eligibility policy and session portal; hidden, unpublished, retracted, deleted, cross-portal, or disabled-community resources are not reachable. PostgreSQL is authoritative. Unique constraints plus transaction-scoped advisory locks make retries and concurrent toggles deterministic, while engagement counts change in the same transaction as their source records. Moderation changes are audited. New authenticated community behavior events use only the authenticated server identity and never alter or link historical anonymous events.
+
+## Phase 9 recommendations and personalization
+
+Authenticated feeds are available at `GET /api/v1/portals/{portal}/feeds/for-you` and `/following`; both require `language`, accept `limit` and an opaque cursor, and return the existing public story-summary schema. The browser routes are `/for-you` and `/following`. Interest reads and replacement live under `/recommendations/me`; mutations use the existing session-bound CSRF protection.
+
+For You combines explicit category/topic/entity/geography interests, current follows, decayed category/entity/geography affinity, and a snapshot-bounded aggregate of privacy-safe behavioral engagement. Cold start falls back deterministically to freshness and engagement. Following returns current public content matching followed entities, topics, or in-portal geographies. PostgreSQL owns interests, affinity, exactly-once signal receipts, and per-user ranking generations; Redis is not used for private ranking correctness.
+
+Recommendation cursors bind portal, user, language, feed type, generation, fixed ranking snapshot, score, publication time, and content UUID. Follow, interest, or affinity changes advance the owning user's generation and reject stale traversal. Public visibility and supported-language checks are reapplied on every page. Authenticated analytics uses `/analytics/me/events`, derives both user and session from the durable cookie session, rejects client identity fields, and never links historical anonymous events.

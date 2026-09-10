@@ -40,6 +40,7 @@ from news_platform.modules.engagement.domain.models import ContentEngagementCoun
 from news_platform.modules.geography.domain.models import GeographyNode
 from news_platform.modules.portals.domain.models import Portal, PortalStatus
 from news_platform.modules.public_site.infrastructure.repository import PublicSiteRepository
+from news_platform.modules.recommendations.application.service import bump_recommendation_generation
 from news_platform.modules.users.application.service import AuthenticatedUser
 from news_platform.modules.users.domain.models import UserProfile
 
@@ -420,9 +421,11 @@ class CommunityService:
                 )
             )
             self._event(auth, "follow", None)
+            await bump_recommendation_generation(self.session, auth.portal.id, auth.user.id)
             return ToggleView(active=True, status="created")
         if not active and existing is not None:
             await self.session.delete(existing)
+            await bump_recommendation_generation(self.session, auth.portal.id, auth.user.id)
             return ToggleView(active=False, status="removed")
         return ToggleView(active=active, status="unchanged")
 

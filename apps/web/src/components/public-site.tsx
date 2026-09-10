@@ -82,6 +82,8 @@ export function SiteHeader({ portal }: { portal: Portal }) {
           <Link href="/latest">Latest</Link>
           <Link href="/search">Search</Link>
           <Link href="/trending">Trending</Link>
+          <Link href="/for-you">For You</Link>
+          <Link href="/following">Following</Link>
           <Link href="/local/texas">Local</Link>
           {portal.categories.map((category) => (
             <Link href={`/${category.slug}`} key={category.slug}>

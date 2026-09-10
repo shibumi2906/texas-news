@@ -13,6 +13,7 @@ from news_platform.infrastructure.redis import create_redis_client
 from news_platform.modules.analytics.application.service import process_analytics_once
 from news_platform.modules.editorial.application.service import EditorialService
 from news_platform.modules.feeds.infrastructure.cache import invalidate_public_feed_cache
+from news_platform.modules.recommendations.application.service import process_affinities_once
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +64,19 @@ async def run() -> None:
                                 "invalidations": invalidated.delivered,
                             },
                         )
+                    affinities = await process_affinities_once(
+                        session_factory, settings.analytics_worker_batch_size
+                    )
+                    if affinities.processed:
+                        logger.info(
+                            "recommendation_affinities_processed",
+                            extra={
+                                "processed": affinities.processed,
+                                "applied": affinities.applied,
+                            },
+                        )
                 except Exception:
-                    logger.exception("analytics_aggregation_iteration_failed")
+                    logger.exception("analytics_and_recommendation_iteration_failed")
             enabled_intervals = [
                 interval
                 for enabled, interval in (

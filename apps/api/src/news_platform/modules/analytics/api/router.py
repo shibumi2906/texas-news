@@ -15,7 +15,13 @@ from news_platform.modules.analytics.application.service import (
     AnalyticsResourceNotFoundError,
     AnalyticsTimestampError,
 )
-from news_platform.modules.analytics.domain.schemas import BehaviorEventCreate, BehaviorEventReceipt
+from news_platform.modules.analytics.domain.schemas import (
+    AuthenticatedBehaviorEventCreate,
+    BehaviorEventCreate,
+    BehaviorEventReceipt,
+)
+from news_platform.modules.users.api.dependencies import csrf_protected_user
+from news_platform.modules.users.application.service import AuthenticatedUser
 
 
 class PrivacySafeAnalyticsRoute(APIRoute):
@@ -41,6 +47,7 @@ router = APIRouter(
     tags=["public-analytics"],
     route_class=PrivacySafeAnalyticsRoute,
 )
+ProtectedUser = Annotated[AuthenticatedUser, Depends(csrf_protected_user)]
 
 
 @router.post("/events", response_model=BehaviorEventReceipt, status_code=201)
@@ -73,3 +80,32 @@ async def collect_event(
         ) from exc
     except AnalyticsIdempotencyConflictError as exc:
         raise HTTPException(409, detail={"code": "EVENT_ID_CONFLICT", "message": str(exc)}) from exc
+
+
+@router.post("/me/events", response_model=BehaviorEventReceipt, status_code=201)
+async def collect_authenticated_event(
+    payload: AuthenticatedBehaviorEventCreate,
+    auth: ProtectedUser,
+    request: Request,
+    response: Response,
+    session: Annotated[AsyncSession, Depends(get_db_session)],
+) -> BehaviorEventReceipt:
+    settings = request.app.state.settings
+    try:
+        receipt = await AnalyticsIngestionService(
+            session,
+            max_age_days=settings.analytics_event_max_age_days,
+            future_skew_seconds=settings.analytics_future_skew_seconds,
+        ).collect_authenticated(auth, payload)
+        await session.commit()
+        if receipt.status == "duplicate":
+            response.status_code = 200
+        response.headers["Cache-Control"] = "no-store"
+        return receipt
+    except AnalyticsResourceNotFoundError as exc:
+        raise HTTPException(404, detail={"code": "ANALYTICS_RESOURCE_NOT_FOUND"}) from exc
+    except AnalyticsTimestampError as exc:
+        raise HTTPException(422, detail={"code": "INVALID_EVENT_TIMESTAMP"}) from exc
+    except AnalyticsIdempotencyConflictError as exc:
+        await session.rollback()
+        raise HTTPException(409, detail={"code": "EVENT_ID_CONFLICT"}) from exc

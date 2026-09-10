@@ -58,6 +58,10 @@ describe("Home", () => {
     expect(
       screen.getByRole("navigation", { name: "Primary navigation" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "For You" })).toHaveAttribute(
+      "href",
+      "/for-you",
+    );
     expect(
       screen.getByRole("heading", { name: "Trending in Texas" }),
     ).toBeInTheDocument();

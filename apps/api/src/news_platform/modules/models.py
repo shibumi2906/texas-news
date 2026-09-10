@@ -32,6 +32,12 @@ from news_platform.modules.ingestion.domain.models import (
 )
 from news_platform.modules.media.domain.models import MediaAsset
 from news_platform.modules.portals.domain.models import Portal
+from news_platform.modules.recommendations.domain.models import (
+    RecommendationGeneration,
+    RecommendationSignalReceipt,
+    UserAffinity,
+    UserInterest,
+)
 from news_platform.modules.search.domain.models import SearchGeneration
 from news_platform.modules.taxonomy.domain.models import Category, Topic
 from news_platform.modules.users.domain.models import AuthSession, User, UserIdentity, UserProfile
@@ -62,11 +68,15 @@ __all__ = [
     "ModerationAuditLog",
     "Portal",
     "Reaction",
+    "RecommendationGeneration",
+    "RecommendationSignalReceipt",
     "Save",
     "Source",
     "SearchGeneration",
     "Topic",
     "User",
+    "UserAffinity",
     "UserIdentity",
+    "UserInterest",
     "UserProfile",
 ]

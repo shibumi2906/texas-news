@@ -54,7 +54,7 @@ class BehaviorEvent(Base):
     portal_id: Mapped[UUID] = mapped_column(
         ForeignKey("portals.id", ondelete="RESTRICT"), nullable=False
     )
-    user_id: Mapped[UUID | None]
+    user_id: Mapped[UUID | None] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
     anonymous_id: Mapped[str | None] = mapped_column(String(128))
     session_id: Mapped[str] = mapped_column(String(128), nullable=False)
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)

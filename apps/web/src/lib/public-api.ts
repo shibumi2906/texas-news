@@ -52,7 +52,14 @@ export type Homepage = {
 
 export type FeedPageData = {
   portal: Portal;
-  feed: "home" | "latest" | "category" | "local" | "trending";
+  feed:
+    | "home"
+    | "latest"
+    | "category"
+    | "local"
+    | "trending"
+    | "for_you"
+    | "following";
   scope: string | null;
   label: string;
   language: string;

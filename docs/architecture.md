@@ -1,4 +1,4 @@
-# Platform architecture through Phase 7
+# Platform architecture through Phase 9
 
 The Site Platform begins as a modular monolith in one monorepo:
 
@@ -31,4 +31,8 @@ Phase 7 adds immutable `BehaviorEvent` rows and separate aggregation receipts. T
 
 The worker claims raw events with PostgreSQL row locks and `SKIP LOCKED`, then applies ranking-relevant deltas through the existing idempotent engagement service in the same transaction as each aggregation receipt. A durable pending-invalidation marker bridges committed PostgreSQL counters to Redis feed-generation invalidation; Redis outages are retryable and cannot double-count engagement.
 
-The Site still defers Integrator replay-control tooling, media downloading, authentication, users, community, personalization, recommendations, notifications, advertising, AI, full admin frontend, and later-phase media UX.
+Phase 8 adds durable portal-bound authentication and the users/community boundaries. Session identity is server-derived, mutations are CSRF/origin protected, and community state is isolated by user, portal, ownership, moderation status, and current public content eligibility.
+
+Phase 9 adds the `recommendations` module. PostgreSQL owns explicit interests, decayed category/entity/geography affinity, exactly-once signal receipts, and user/portal ranking generations. The worker consumes only authenticated future events; anonymous history remains anonymous. For You uses deterministic configured signals, immutable aggregation-time engagement snapshots, freshness, interests, follows, and affinity. Following uses current follow state. Both feeds reuse the public read model and reject user-, portal-, language-, feed-, or generation-mismatched cursors. Redis remains outside private ranking correctness.
+
+The Site still defers Integrator replay-control tooling, media downloading, notifications, advertising, Site AI, full admin frontend, multilingual expansion, embeddings, semantic similarity, collaborative filtering, AI reranking, and later-phase media UX.

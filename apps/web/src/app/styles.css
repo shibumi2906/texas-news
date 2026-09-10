@@ -132,6 +132,46 @@ img {
   padding-block: 24px 70px;
 }
 
+.personalized-state {
+  padding-block: 80px;
+}
+
+.personalized-state a {
+  color: var(--accent);
+  font-weight: 800;
+}
+
+.personalized-page {
+  padding-bottom: 70px;
+}
+
+.interest-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 22px;
+  margin: 0 0 28px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.interest-picker legend {
+  padding-inline: 8px;
+  font-weight: 800;
+}
+
+.interest-picker label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+
+.interest-picker small {
+  flex-basis: 100%;
+  color: var(--muted);
+}
+
 .lead-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.9fr) minmax(300px, 0.9fr);
