@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SiteHeader, StoryCard } from "@/components/public-site";
 import type { SearchPageData } from "@/lib/public-api";
+import { AiAssistant } from "@/components/ai-assistant";
 
 export function SearchView({
   data,
@@ -24,6 +25,7 @@ export function SearchView({
           Find published stories by keyword, entity, location, category or
           publication date.
         </p>
+        <AiAssistant />
         <form
           action="/search"
           method="get"

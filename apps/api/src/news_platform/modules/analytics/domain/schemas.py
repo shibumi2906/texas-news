@@ -29,6 +29,7 @@ EVENT_PROPERTIES = {
     BehaviorEventType.COMPLETION: set(),
     BehaviorEventType.SHARE: {"channel"},
     BehaviorEventType.SEARCH: {"result_count"},
+    BehaviorEventType.AI_QUERY: {"surface", "answer_status", "source_count"},
 }
 
 
@@ -72,11 +73,16 @@ class BehaviorEventBase(BaseModel):
             value = self.properties["channel"]
             if not isinstance(value, str) or not 1 <= len(value) <= 32:
                 raise ValueError("channel must be a string of 1 to 32 characters")
+        if "answer_status" in self.properties:
+            value = self.properties["answer_status"]
+            if value not in {"answered", "insufficient_evidence"}:
+                raise ValueError("answer_status is invalid")
         for name, minimum, maximum in (
             ("position", 0, 10_000),
             ("percent", 0, 100),
             ("offset_seconds", 0, 86_400),
             ("result_count", 0, 1_000_000),
+            ("source_count", 0, 50),
         ):
             if name in self.properties:
                 value = self.properties[name]

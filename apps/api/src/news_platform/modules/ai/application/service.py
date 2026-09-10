@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from time import monotonic
 from typing import Any
+from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,14 +18,35 @@ from news_platform.modules.ai.application.ports import ProviderError, ProviderRe
 from news_platform.modules.ai.application.tasks import AITaskDefinition, ModelRouter, TaskManager
 from news_platform.modules.ai.domain.models import AIExecution, AIResult
 from news_platform.modules.ai.domain.schemas import (
+    AIAnswerMetadata,
+    AIAnswerResponse,
+    AIAnswerStatus,
+    AIAnswerTask,
+    AIQueryRequest,
+    AIQuickBriefRequest,
     AISourceReference,
+    GroundedAnswerOutput,
     StorySummaryOutput,
     StorySummaryResponse,
 )
-from news_platform.modules.ai.infrastructure.providers import ProviderRegistry, extractive_bullets
+from news_platform.modules.ai.infrastructure.providers import (
+    ProviderRegistry,
+    extractive_answer,
+    extractive_bullets,
+)
 from news_platform.modules.ai.infrastructure.repository import AIRepository
+from news_platform.modules.analytics.application.service import AnalyticsIngestionService
+from news_platform.modules.analytics.domain.models import BehaviorEventType
+from news_platform.modules.analytics.domain.schemas import BehaviorEventCreate
+from news_platform.modules.feeds.application.service import FeedService
+from news_platform.modules.feeds.domain.schemas import FeedKind
+from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.public_site.application.service import PublicSiteService
 from news_platform.modules.public_site.infrastructure.repository import PublicContentRecord
+from news_platform.modules.search.application.service import SearchService
+from news_platform.modules.search.domain.schemas import SearchQuery
+from news_platform.modules.search.infrastructure.postgres import PostgresSearchBackend
+from news_platform.modules.users.application.rate_limit import enforce_rate_limit
 
 
 class AIResourceNotFoundError(Exception):
@@ -31,6 +54,10 @@ class AIResourceNotFoundError(Exception):
 
 
 class AIConfigurationError(Exception):
+    pass
+
+
+class AIFeatureDisabledError(Exception):
     pass
 
 
@@ -45,6 +72,22 @@ def _strict_output(raw: str) -> StorySummaryOutput:
         if start >= 0 and end > start:
             try:
                 return StorySummaryOutput.model_validate_json(candidate[start : end + 1])
+            except ValidationError:
+                pass
+        raise first_error
+
+
+def _strict_answer(raw: str) -> GroundedAnswerOutput:
+    candidate = raw.strip()
+    if candidate.startswith("```"):
+        candidate = re.sub(r"^```(?:json)?\s*|\s*```$", "", candidate, flags=re.I)
+    try:
+        return GroundedAnswerOutput.model_validate_json(candidate)
+    except ValidationError as first_error:
+        start, end = candidate.find("{"), candidate.rfind("}")
+        if start >= 0 and end > start:
+            try:
+                return GroundedAnswerOutput.model_validate_json(candidate[start : end + 1])
             except ValidationError:
                 pass
         raise first_error
@@ -90,6 +133,41 @@ def _content_hash(record: PublicContentRecord) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
     ).hexdigest()
+
+
+def _retrieval_terms(question: str) -> str:
+    ignored = {
+        "a",
+        "about",
+        "an",
+        "and",
+        "are",
+        "did",
+        "do",
+        "for",
+        "happened",
+        "how",
+        "in",
+        "is",
+        "me",
+        "of",
+        "on",
+        "the",
+        "this",
+        "today",
+        "was",
+        "what",
+        "when",
+        "where",
+        "which",
+        "who",
+        "why",
+        "with",
+        "week",
+        "weekend",
+    }
+    words = re.findall(r"[\w'-]+", question.lower(), flags=re.UNICODE)
+    return " ".join(word for word in words if word not in ignored)[:200]
 
 
 def _cache_key(
@@ -274,6 +352,390 @@ class AIService:
             fallback_used,
             selected_provider != "deterministic",
             False,
+        )
+
+    async def ai_search(
+        self, portal_slug: str, payload: AIQueryRequest, redis: Any
+    ) -> AIAnswerResponse:
+        portal, public = await self._portal(portal_slug, payload.language, "ai_search")
+        await self._limit(redis, portal, payload.anonymous_id, "search")
+        terms = _retrieval_terms(payload.question)
+        records: list[PublicContentRecord] = []
+        if terms:
+            page = await SearchService(public, PostgresSearchBackend(self.session)).page(
+                portal_slug, SearchQuery(q=terms, language=payload.language, limit=5)
+            )
+            records = await self._records(portal, public, [item.slug for item in page.items])
+        result = await self._grounded_answer(
+            "ai_search",
+            portal,
+            public,
+            records,
+            payload.question,
+            AIAnswerMetadata(timezone=portal.timezone),
+        )
+        await self._analytics(portal_slug, payload, result, "ai_search")
+        return result
+
+    async def story_question(
+        self, portal_slug: str, story_slug: str, payload: AIQueryRequest, redis: Any
+    ) -> AIAnswerResponse:
+        portal, public = await self._portal(portal_slug, payload.language, "ai_chat")
+        await self._limit(redis, portal, payload.anonymous_id, "story_question")
+        record = await public.repository.get_story(portal, story_slug, self.now)
+        if record is None or record.content.primary_language != payload.language:
+            raise AIResourceNotFoundError("story not found")
+        result = await self._grounded_answer(
+            "story_question",
+            portal,
+            public,
+            [record],
+            payload.question,
+            AIAnswerMetadata(timezone=portal.timezone),
+        )
+        await self._analytics(
+            portal_slug, payload, result, "story_question", content_id=record.content.id
+        )
+        return result
+
+    async def trending(
+        self, portal_slug: str, payload: AIQuickBriefRequest, redis: Any
+    ) -> AIAnswerResponse:
+        portal, public = await self._portal(portal_slug, payload.language, "ai_chat")
+        await self._limit(redis, portal, payload.anonymous_id, "trending")
+        page = await FeedService(
+            self.session, redis, self.settings.feed_cache_ttl_seconds, now=self.now
+        ).page(
+            portal_slug,
+            FeedKind.TRENDING,
+            language=payload.language,
+            limit=5,
+            cursor_value=None,
+        )
+        records = await self._records(portal, public, [item.slug for item in page.items])
+        result = await self._grounded_answer(
+            "trending_digest",
+            portal,
+            public,
+            records,
+            "What is trending?",
+            AIAnswerMetadata(timezone=portal.timezone, ranking_authoritative=True),
+        )
+        await self._analytics(portal_slug, payload, result, "trending")
+        return result
+
+    async def today(
+        self, portal_slug: str, payload: AIQuickBriefRequest, redis: Any
+    ) -> AIAnswerResponse:
+        portal, public = await self._portal(portal_slug, payload.language, "ai_chat")
+        await self._limit(redis, portal, payload.anonymous_id, "today")
+        timezone = ZoneInfo(portal.timezone)
+        local_now = self.now.astimezone(timezone)
+        local_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        window_start = local_start.astimezone(UTC)
+        window_end = (local_start + timedelta(days=1)).astimezone(UTC)
+        records = await public.repository.list_content_window(
+            portal,
+            self.now,
+            language=payload.language,
+            published_from=window_start,
+            published_before=window_end,
+            limit=10,
+        )
+        result = await self._grounded_answer(
+            "today_digest",
+            portal,
+            public,
+            records,
+            "What happened today?",
+            AIAnswerMetadata(
+                timezone=portal.timezone, window_start=window_start, window_end=window_end
+            ),
+        )
+        await self._analytics(portal_slug, payload, result, "today")
+        return result
+
+    async def _portal(
+        self, portal_slug: str, language: str, feature: str
+    ) -> tuple[Portal, PublicSiteService]:
+        public = PublicSiteService(self.session, self.now)
+        portal = await public.repository.get_portal(portal_slug)
+        if portal is None or language not in portal.supported_languages:
+            raise AIResourceNotFoundError("portal or language not found")
+        if portal.feature_flags.get(feature) is False:
+            raise AIFeatureDisabledError(f"{feature} is disabled")
+        return portal, public
+
+    async def _limit(self, redis: Any, portal: Portal, actor: str, surface: str) -> None:
+        await enforce_rate_limit(
+            redis,
+            f"ai:{portal.id}:{actor}:{surface}",
+            limit=self.settings.ai_rate_limit,
+            window_seconds=self.settings.ai_rate_limit_window_seconds,
+        )
+
+    async def _records(
+        self, portal: Portal, public: PublicSiteService, slugs: list[str]
+    ) -> list[PublicContentRecord]:
+        records: list[PublicContentRecord] = []
+        for slug in slugs:
+            record = await public.repository.get_story(portal, slug, self.now)
+            if record is not None:
+                records.append(record)
+        return records
+
+    async def _analytics(
+        self,
+        portal_slug: str,
+        payload: AIQueryRequest | AIQuickBriefRequest,
+        result: AIAnswerResponse,
+        surface: str,
+        content_id: UUID | None = None,
+    ) -> None:
+        await AnalyticsIngestionService(
+            self.session,
+            now=self.now,
+            max_age_days=self.settings.analytics_event_max_age_days,
+            future_skew_seconds=self.settings.analytics_future_skew_seconds,
+        ).collect(
+            portal_slug,
+            BehaviorEventCreate(
+                id=payload.event_id,
+                anonymous_id=payload.anonymous_id,
+                session_id=payload.session_id,
+                event_type=BehaviorEventType.AI_QUERY,
+                content_id=content_id,
+                timestamp=self.now,
+                properties={
+                    "surface": surface,
+                    "answer_status": result.status.value,
+                    "source_count": len(result.sources),
+                },
+            ),
+        )
+
+    async def _grounded_answer(
+        self,
+        task_name: AIAnswerTask,
+        portal: Portal,
+        public: PublicSiteService,
+        records: list[PublicContentRecord],
+        question: str,
+        metadata: AIAnswerMetadata,
+    ) -> AIAnswerResponse:
+        if not records:
+            return AIAnswerResponse(
+                task=task_name,
+                answer="The platform does not have enough published information to answer that.",
+                status=AIAnswerStatus.INSUFFICIENT_EVIDENCE,
+                insufficient_evidence=True,
+                generated=False,
+                fallback_used=False,
+                cached=False,
+                sources=[],
+                metadata=metadata,
+            )
+
+        task = TaskManager(self.settings).get(task_name)
+        routes = ModelRouter.candidates(task)
+        if not routes:
+            raise AIConfigurationError("no allowed model route")
+        prompt = await self.repository.active_prompt(task.task_name, task.prompt_version)
+        if prompt is None:
+            raise AIConfigurationError("active prompt version unavailable")
+
+        source = self._answer_source(records, question, task.max_input_tokens)
+        source_json = json.dumps(source, ensure_ascii=False, separators=(",", ":"))
+        content_hash = hashlib.sha256(source_json.encode()).hexdigest()
+        lock_key = _cache_key(
+            task,
+            content_hash,
+            str(portal.id),
+            records[0].content.primary_language,
+            task.primary_model,
+        )
+        await self.repository.lock_cache_key(lock_key)
+        for cached_model in [
+            *(f"{route.provider}:{route.model}" for route in routes),
+            "deterministic:extractive-v1",
+        ]:
+            cached = await self.repository.cached_result(
+                _cache_key(
+                    task,
+                    content_hash,
+                    str(portal.id),
+                    records[0].content.primary_language,
+                    cached_model,
+                ),
+                self.now,
+            )
+            if cached is not None:
+                return self._answer_response(
+                    task_name,
+                    public,
+                    portal,
+                    records,
+                    GroundedAnswerOutput.model_validate(cached.output),
+                    metadata,
+                    cached.fallback_used,
+                    cached.provider != "deterministic",
+                    True,
+                )
+
+        output: GroundedAnswerOutput | None = None
+        selected_provider, selected_model = "deterministic", "extractive-v1"
+        fallback_used = False
+        for attempt in range(task.max_retries + 1):
+            route_index = min(attempt, len(routes) - 1)
+            route = routes[route_index]
+            started = monotonic()
+            response = None
+            error_type: str | None = None
+            try:
+                response = await self.providers.get(route.provider).execute(
+                    ProviderRequest(
+                        task=task.task_name,
+                        model=route.model,
+                        system_prompt=prompt.template,
+                        source_json=source_json,
+                        max_output_tokens=task.max_output_tokens,
+                        timeout_seconds=task.timeout_seconds,
+                        reasoning_level=task.reasoning_level,
+                    )
+                )
+                if response.estimated_cost > task.max_cost:
+                    raise ProviderError("cost_limit")
+                if response.output_tokens > task.max_output_tokens:
+                    raise ProviderError("output_token_limit")
+                try:
+                    output = _strict_answer(response.output_text)
+                except ValidationError as exc:
+                    raise ProviderError("invalid_structured_output") from exc
+                selected_provider, selected_model = route.provider, route.model
+            except ProviderError as exc:
+                error_type = exc.error_type
+            self.session.add(
+                AIExecution(
+                    task=task.task_name,
+                    provider=route.provider,
+                    model=route.model,
+                    gateway=response.gateway if response else None,
+                    latency_ms=max(0, round((monotonic() - started) * 1000)),
+                    input_tokens=response.input_tokens
+                    if response
+                    else max(1, len(source_json) // 4),
+                    output_tokens=response.output_tokens if response else 0,
+                    estimated_cost=response.estimated_cost if response else Decimal("0"),
+                    success=output is not None,
+                    error_type=error_type,
+                    retry_count=attempt,
+                    fallback_used=route_index > 0,
+                    content_id=records[0].content.id,
+                    portal_id=portal.id,
+                    prompt_version=prompt.version,
+                    metadata_={
+                        "schema_version": task.response_schema,
+                        "source_count": len(records),
+                    },
+                )
+            )
+            if output is not None:
+                fallback_used = route_index > 0
+                break
+
+        if output is None:
+            output = GroundedAnswerOutput(answer=extractive_answer(source))
+            fallback_used = True
+        cache_key = _cache_key(
+            task,
+            content_hash,
+            str(portal.id),
+            records[0].content.primary_language,
+            f"{selected_provider}:{selected_model}",
+        )
+        await self.repository.remove_expired_result(cache_key, self.now)
+        self.session.add(
+            AIResult(
+                cache_key=cache_key,
+                task=task.task_name,
+                content_id=records[0].content.id,
+                portal_id=portal.id,
+                language=records[0].content.primary_language,
+                content_hash=content_hash,
+                provider=selected_provider,
+                model=selected_model,
+                prompt_version=prompt.version,
+                schema_version=task.response_schema,
+                output=output.model_dump(mode="json"),
+                fallback_used=fallback_used,
+                expires_at=self.now + timedelta(seconds=task.cache_ttl_seconds),
+            )
+        )
+        return self._answer_response(
+            task_name,
+            public,
+            portal,
+            records,
+            output,
+            metadata,
+            fallback_used,
+            selected_provider != "deterministic",
+            False,
+        )
+
+    @staticmethod
+    def _answer_source(
+        records: list[PublicContentRecord], question: str, max_tokens: int
+    ) -> dict[str, Any]:
+        remaining = max(0, max_tokens * 4 - len(question) - 300)
+        items: list[dict[str, Any]] = []
+        per_item = max(200, remaining // len(records))
+        for record in records:
+            content = record.content
+            item = {
+                "id": str(content.id),
+                "title": content.title,
+                "subtitle": content.subtitle,
+                "description": content.description,
+                "body": (content.body or "")[:per_item],
+                "published_at": content.site_published_at.isoformat()
+                if content.site_published_at
+                else None,
+            }
+            items.append(item)
+        return {"question": question, "items": items}
+
+    @staticmethod
+    def _answer_response(
+        task_name: AIAnswerTask,
+        public: PublicSiteService,
+        portal: Portal,
+        records: list[PublicContentRecord],
+        output: GroundedAnswerOutput,
+        metadata: AIAnswerMetadata,
+        fallback_used: bool,
+        generated: bool,
+        cached: bool,
+    ) -> AIAnswerResponse:
+        sources = [public.story_summary(portal, record) for record in records]
+        return AIAnswerResponse(
+            task=task_name,
+            answer=output.answer,
+            status=AIAnswerStatus.ANSWERED,
+            insufficient_evidence=False,
+            generated=generated,
+            fallback_used=fallback_used,
+            cached=cached,
+            sources=[
+                AISourceReference(
+                    content_id=source.id,
+                    title=source.title,
+                    url=source.url,
+                    canonical_url=source.canonical_url,
+                )
+                for source in sources
+            ],
+            metadata=metadata,
         )
 
     @staticmethod

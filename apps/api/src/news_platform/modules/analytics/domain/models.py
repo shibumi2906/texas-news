@@ -28,6 +28,7 @@ class BehaviorEventType(StrEnum):
     COMMENT = "comment"
     SAVE = "save"
     FOLLOW = "follow"
+    AI_QUERY = "ai_query"
 
 
 EVENT_TYPES = tuple(event_type.value for event_type in BehaviorEventType)

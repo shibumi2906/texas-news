@@ -43,6 +43,23 @@ def extractive_bullets(source: dict[str, Any]) -> list[str]:
     return unique
 
 
+def extractive_answer(source: dict[str, Any]) -> str:
+    """Deterministic grounded fallback over the supplied public records."""
+    items = source.get("items")
+    if not isinstance(items, list) or not items:
+        return "The platform does not have enough published information to answer that."
+    points: list[str] = []
+    for raw in items[:5]:
+        if not isinstance(raw, dict):
+            continue
+        title = str(raw.get("title") or "Published story").strip()
+        detail = raw.get("description") or raw.get("subtitle") or raw.get("body")
+        sentences = _sentences(str(detail)) if detail else []
+        point = f"{title}: {sentences[0]}" if sentences else title
+        points.append(point[:700].rstrip())
+    return " ".join(points)
+
+
 class LocalSummaryAdapter:
     """Deterministic development adapter; it makes no external calls."""
 
@@ -66,7 +83,11 @@ class LocalSummaryAdapter:
             source = json.loads(request.source_json)
         except json.JSONDecodeError as exc:
             raise ProviderError("invalid_request") from exc
-        output = json.dumps({"bullets": extractive_bullets(source)})
+        output = json.dumps(
+            {"bullets": extractive_bullets(source)}
+            if request.task == "story_summary"
+            else {"answer": extractive_answer(source)}
+        )
         return ProviderResponse(
             output_text=output,
             input_tokens=max(1, len(request.source_json) // 4),

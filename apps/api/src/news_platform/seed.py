@@ -104,8 +104,8 @@ async def seed_texas(session: AsyncSession) -> SeedResult:
     if portal is None:
         feature_flags: dict[str, Any] = {
             "community": True,
-            "ai_chat": False,
-            "ai_search": False,
+            "ai_chat": True,
+            "ai_search": True,
             "recommendations": True,
             "personalization": True,
             "shorts": False,

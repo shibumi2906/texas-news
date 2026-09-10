@@ -617,6 +617,72 @@ img {
   opacity: 0.7;
 }
 
+.ai-assistant {
+  max-width: 720px;
+  margin: 26px auto;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--surface), var(--surface-strong));
+}
+
+.ai-assistant h2 {
+  margin: 4px 0 8px;
+}
+
+.ai-question-form {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+
+.ai-question-form label {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.ai-question-form input,
+.ai-question-form button,
+.ai-quick-actions button {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font: inherit;
+}
+
+.ai-question-form button,
+.ai-quick-actions button {
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.ai-quick-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ai-answer {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.ai-answer h3 {
+  margin-bottom: 6px;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ai-answer small {
+  color: var(--muted);
+}
+
 .story-taxonomy {
   display: flex;
   flex-wrap: wrap;

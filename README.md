@@ -336,8 +336,31 @@ retracted, deleted, future, or cross-portal content. Redis is not used as AI res
 Provider timeouts, errors, rate limits, unavailable routes, cost/token policy violations, and invalid
 structured output are bounded by the task retry/fallback policy. Exhaustion returns a deterministic
 extractive summary from the same already-authorized story. Provider error bodies and prompt bodies
-are not persisted. AI Search, AI Chat, story Q&A, retrieval across stories, A/B testing, and AI admin
-UI remain deferred to their later phases.
+are not persisted.
+
+## Phase 11 AI Search and AI Chat
+
+Phase 11 adds grounded reader endpoints without bypassing the Phase 10 AI service:
+
+```text
+POST /api/v1/portals/{portal_slug}/ai/search
+POST /api/v1/portals/{portal_slug}/stories/{story_slug}/ai-question
+POST /api/v1/portals/{portal_slug}/ai/trending
+POST /api/v1/portals/{portal_slug}/ai/today
+```
+
+AI Search retrieves through the existing PostgreSQL search service. Story questions use the
+current public story as their only context. Trending briefs preserve the existing feed ranking,
+and today briefs use the portal timezone to select the current local calendar day. Every response
+includes its supporting public content references or an explicit `insufficient_evidence` status;
+hidden, unpublished, retracted, deleted, future, wrong-language, and cross-portal content remains
+excluded by the shared public eligibility policy.
+
+The `ai_search` and `ai_chat` portal flags, shared Redis rate limiter, `ai_query` behavioral event,
+structured output validation, provider fallback, telemetry, and content-derived cache are reused
+end to end. The search page provides AI Search plus trending/today shortcuts, while story pages add
+an on-demand **Ask about this story** panel. Multilingual delivery, AI administration, prompt/model
+A/B testing, and external web search remain deferred.
 
 ## One-command checks
 

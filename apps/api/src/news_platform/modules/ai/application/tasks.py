@@ -28,11 +28,22 @@ class TaskManager:
         self.settings = settings
 
     def get(self, task_name: str) -> AITaskDefinition:
-        if task_name != "story_summary":
+        if task_name not in {
+            "story_summary",
+            "ai_search",
+            "story_question",
+            "trending_digest",
+            "today_digest",
+        }:
             raise KeyError(task_name)
+        is_summary = task_name == "story_summary"
         fallbacks = tuple(
             model.strip()
-            for model in self.settings.ai_story_summary_fallback_models.split(",")
+            for model in (
+                self.settings.ai_story_summary_fallback_models
+                if is_summary
+                else self.settings.ai_query_fallback_models
+            ).split(",")
             if model.strip()
         )
         providers = frozenset(
@@ -42,16 +53,38 @@ class TaskManager:
         )
         return AITaskDefinition(
             task_name=task_name,
-            primary_model=self.settings.ai_story_summary_primary_model,
+            primary_model=(
+                self.settings.ai_story_summary_primary_model
+                if is_summary
+                else self.settings.ai_query_primary_model
+            ),
             fallback_models=fallbacks,
             allowed_providers=providers,
-            max_cost=Decimal(str(self.settings.ai_story_summary_max_cost)),
-            max_input_tokens=self.settings.ai_story_summary_max_input_tokens,
-            max_output_tokens=self.settings.ai_story_summary_max_output_tokens,
+            max_cost=Decimal(
+                str(
+                    self.settings.ai_story_summary_max_cost
+                    if is_summary
+                    else self.settings.ai_query_max_cost
+                )
+            ),
+            max_input_tokens=(
+                self.settings.ai_story_summary_max_input_tokens
+                if is_summary
+                else self.settings.ai_query_max_input_tokens
+            ),
+            max_output_tokens=(
+                self.settings.ai_story_summary_max_output_tokens
+                if is_summary
+                else self.settings.ai_query_max_output_tokens
+            ),
             timeout_seconds=self.settings.ai_provider_timeout_seconds,
-            max_retries=self.settings.ai_story_summary_max_retries,
+            max_retries=(
+                self.settings.ai_story_summary_max_retries
+                if is_summary
+                else self.settings.ai_query_max_retries
+            ),
             reasoning_level="none",
-            response_schema="story_summary.v1",
+            response_schema="story_summary.v1" if is_summary else "grounded_answer.v1",
             prompt_version=1,
             cache_ttl_seconds=self.settings.ai_cache_ttl_seconds,
         )

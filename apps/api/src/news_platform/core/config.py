@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     ai_story_summary_max_input_tokens: int = Field(default=4000, ge=128, le=100000)
     ai_story_summary_max_output_tokens: int = Field(default=300, ge=32, le=10000)
     ai_story_summary_max_retries: int = Field(default=2, ge=0, le=5)
+    ai_query_primary_model: str = "local:grounded-answer-v1"
+    ai_query_fallback_models: str = ""
+    ai_query_max_cost: float = Field(default=0.03, ge=0, le=100)
+    ai_query_max_input_tokens: int = Field(default=6000, ge=128, le=100000)
+    ai_query_max_output_tokens: int = Field(default=500, ge=32, le=10000)
+    ai_query_max_retries: int = Field(default=2, ge=0, le=5)
+    ai_rate_limit: int = Field(default=20, ge=0, le=10000)
+    ai_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86400)
     ai_provider_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     ai_cache_ttl_seconds: int = Field(default=86400, ge=60, le=2592000)
     ai_gateway_url: str | None = None

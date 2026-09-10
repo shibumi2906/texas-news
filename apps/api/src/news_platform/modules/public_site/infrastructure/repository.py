@@ -139,6 +139,32 @@ class PublicSiteRepository:
         )
         return await self._hydrate(items), total or 0
 
+    async def list_content_window(
+        self,
+        portal: Portal,
+        now: datetime,
+        *,
+        language: str,
+        published_from: datetime,
+        published_before: datetime,
+        limit: int,
+    ) -> list[PublicContentRecord]:
+        items = list(
+            (
+                await self.session.scalars(
+                    self._eligible_statement(portal, now)
+                    .where(
+                        ContentItem.primary_language == language,
+                        ContentItem.site_published_at >= published_from,
+                        ContentItem.site_published_at < published_before,
+                    )
+                    .order_by(ContentItem.site_published_at.desc(), ContentItem.id.desc())
+                    .limit(limit)
+                )
+            ).all()
+        )
+        return await self._hydrate(items)
+
     async def get_story(
         self, portal: Portal, slug: str, now: datetime
     ) -> PublicContentRecord | None:

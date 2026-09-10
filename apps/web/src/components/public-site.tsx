@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { AiStorySummary } from "@/components/ai-story-summary";
+import { AiAssistant } from "@/components/ai-assistant";
 import { CommunityPanel } from "@/components/community";
 
 import type {
@@ -345,6 +346,7 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
             storySlug={story.slug}
             language={story.portal.default_language}
           />
+          <AiAssistant storySlug={story.slug} />
           <div className="story-body">
             {paragraphs.length ? (
               paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)
