@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AiStorySummary } from "@/components/ai-story-summary";
 import { CommunityPanel } from "@/components/community";
 
 import type {
@@ -340,6 +341,10 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
             ) : null}
           </div>
           <ShareControls story={story} />
+          <AiStorySummary
+            storySlug={story.slug}
+            language={story.portal.default_language}
+          />
           <div className="story-body">
             {paragraphs.length ? (
               paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)

@@ -301,6 +301,44 @@ docker compose exec postgres pg_isready -U news_platform -d news_platform
 docker compose exec redis redis-cli ping
 ```
 
+## Phase 10 AI service
+
+Phase 10 adds a provider-neutral AI boundary and one intentionally small task:
+
+```text
+GET /api/v1/portals/{portal_slug}/stories/{story_slug}/ai-summary?language=en
+```
+
+The story page invokes it only when a reader selects **Summarize this story**, keeping external AI
+out of normal page rendering. Every request reuses the public story eligibility policy before cache
+lookup or provider execution. The provider receives only effective title, subtitle, description,
+body, and language for that one public in-portal story. Ingestion envelopes, content-version audit
+history, community data, user state, cookies, request headers, and credentials never enter prompts.
+
+`story_summary` is configured by the `AI_STORY_SUMMARY_*` variables in `.env.example`. Model routes
+use `provider:model`; the default `local:story-summary-v1` adapter is deterministic and network-free
+for local development and Docker acceptance. An external OpenAI-compatible gateway can be enabled
+with `AI_GATEWAY_URL` and `AI_GATEWAY_API_KEY` and selected with a `gateway:<model>` route. The secret
+is process configuration only and is neither persisted nor logged.
+
+For deterministic Docker failure-path acceptance, the network-free local adapter supports
+`AI_LOCAL_STUB_RESPONSE_MODE=success|malformed|provider_error|rate_limit|timeout`. This setting is a
+stub harness only; it is never selected from a request and production should route to a configured
+gateway provider.
+
+Prompts, validated successful results, and privacy-safe per-attempt telemetry are durable in
+PostgreSQL. Cache identity includes content hash, task, selected model, prompt version, language,
+schema version, and portal. A transaction-scoped advisory lock prevents concurrent duplicate calls.
+Results expire after `AI_CACHE_TTL_SECONDS`; editorial changes create a new content hash, while every
+read rechecks current publication/upstream visibility so a cached summary cannot expose hidden,
+retracted, deleted, future, or cross-portal content. Redis is not used as AI result authority.
+
+Provider timeouts, errors, rate limits, unavailable routes, cost/token policy violations, and invalid
+structured output are bounded by the task retry/fallback policy. Exhaustion returns a deterministic
+extractive summary from the same already-authorized story. Provider error bodies and prompt bodies
+are not persisted. AI Search, AI Chat, story Q&A, retrieval across stories, A/B testing, and AI admin
+UI remain deferred to their later phases.
+
 ## One-command checks
 
 After installing host dependencies, run all static and test checks plus Compose validation:

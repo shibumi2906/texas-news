@@ -1,5 +1,11 @@
 """Import all Phase 1 models so SQLAlchemy metadata is complete."""
 
+from news_platform.modules.ai.domain.models import (
+    AIExecution,
+    AIResult,
+    PromptDefinition,
+    PromptVersion,
+)
 from news_platform.modules.analytics.domain.models import BehaviorEvent, BehaviorEventAggregation
 from news_platform.modules.community.domain.models import (
     Comment,
@@ -43,6 +49,8 @@ from news_platform.modules.taxonomy.domain.models import Category, Topic
 from news_platform.modules.users.domain.models import AuthSession, User, UserIdentity, UserProfile
 
 __all__ = [
+    "AIExecution",
+    "AIResult",
     "BehaviorEvent",
     "BehaviorEventAggregation",
     "Category",
@@ -67,6 +75,8 @@ __all__ = [
     "MediaAsset",
     "ModerationAuditLog",
     "Portal",
+    "PromptDefinition",
+    "PromptVersion",
     "Reaction",
     "RecommendationGeneration",
     "RecommendationSignalReceipt",

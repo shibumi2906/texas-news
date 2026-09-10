@@ -10,6 +10,8 @@ from news_platform.core.config import Settings, get_settings
 from news_platform.core.logging import RequestLoggingMiddleware, configure_logging
 from news_platform.infrastructure.database import create_db_engine, create_session_factory
 from news_platform.infrastructure.redis import create_redis_client
+from news_platform.modules.ai.api.router import router as ai_router
+from news_platform.modules.ai.infrastructure.providers import ProviderRegistry
 from news_platform.modules.analytics.api.router import router as analytics_router
 from news_platform.modules.community.api.router import router as community_router
 from news_platform.modules.editorial.api.router import router as editorial_router
@@ -37,6 +39,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.db_engine = engine
         app.state.db_session_factory = create_session_factory(engine)
         app.state.redis = redis_client
+        app.state.ai_providers = ProviderRegistry.from_settings(application_settings)
         try:
             yield
         finally:
@@ -61,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(community_router)
     application.include_router(recommendations_router)
     application.include_router(recommendation_feed_router)
+    application.include_router(ai_router)
     return application
 
 

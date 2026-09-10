@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,6 +37,21 @@ class Settings(BaseSettings):
     auth_allowed_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     community_rate_limit: int = Field(default=30, ge=0, le=10000)
     community_rate_limit_window_seconds: int = Field(default=60, ge=1, le=86400)
+    ai_allowed_providers: str = "local,gateway"
+    ai_story_summary_primary_model: str = "local:story-summary-v1"
+    ai_story_summary_fallback_models: str = ""
+    ai_story_summary_max_cost: float = Field(default=0.02, ge=0, le=100)
+    ai_story_summary_max_input_tokens: int = Field(default=4000, ge=128, le=100000)
+    ai_story_summary_max_output_tokens: int = Field(default=300, ge=32, le=10000)
+    ai_story_summary_max_retries: int = Field(default=2, ge=0, le=5)
+    ai_provider_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    ai_cache_ttl_seconds: int = Field(default=86400, ge=60, le=2592000)
+    ai_gateway_url: str | None = None
+    ai_gateway_api_key: SecretStr | None = None
+    ai_gateway_name: str = "external-gateway"
+    ai_local_stub_response_mode: str = Field(
+        default="success", pattern="^(success|malformed|provider_error|rate_limit|timeout)$"
+    )
 
 
 @lru_cache
