@@ -19,6 +19,7 @@ export type Portal = {
   domain: string;
   timezone: string;
   default_language: string;
+  supported_languages: string[];
   canonical_url: string;
   branding: Record<string, unknown>;
   categories: Category[];
@@ -29,6 +30,8 @@ export type StorySummary = {
   slug: string;
   url: string;
   canonical_url: string;
+  language: string;
+  alternates: Record<string, string>;
   content_type: string;
   title: string;
   subtitle: string | null;
@@ -44,6 +47,9 @@ export type StorySummary = {
 
 export type Homepage = {
   portal: Portal;
+  language: string;
+  canonical_url: string;
+  alternates: Record<string, string>;
   hero: StorySummary | null;
   trending: StorySummary[];
   category_sections: { category: Category; items: StorySummary[] }[];
@@ -64,6 +70,7 @@ export type FeedPageData = {
   label: string;
   language: string;
   canonical_url: string;
+  alternates: Record<string, string>;
   items: StorySummary[];
   next_cursor: string | null;
 };
@@ -104,8 +111,10 @@ async function request<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-export const getHomepage = cache(() =>
-  request<Homepage>("/api/v1/portals/texas/home"),
+export const getHomepage = cache((language = "en") =>
+  request<Homepage>(
+    `/api/v1/portals/texas/home?${new URLSearchParams({ language })}`,
+  ),
 );
 
 type FeedKind = "home" | "latest" | "trending" | "category" | "local";
@@ -118,8 +127,14 @@ function feedPath(kind: FeedKind, scope?: string): string {
 }
 
 export const getFeed = cache(
-  (kind: FeedKind, scope?: string, cursor?: string, limit = 12) => {
-    const query = new URLSearchParams({ language: "en", limit: String(limit) });
+  (
+    kind: FeedKind,
+    scope?: string,
+    cursor?: string,
+    limit = 12,
+    language = "en",
+  ) => {
+    const query = new URLSearchParams({ language, limit: String(limit) });
     if (cursor) query.set("cursor", cursor);
     return request<FeedPageData>(
       `/api/v1/portals/texas/feeds/${feedPath(kind, scope)}?${query}`,
@@ -127,20 +142,22 @@ export const getFeed = cache(
   },
 );
 
-export const getCategory = (slug: string, cursor?: string) =>
-  getFeed("category", slug, cursor);
+export const getCategory = (slug: string, cursor?: string, language = "en") =>
+  getFeed("category", slug, cursor, 12, language);
 
-export const getLatest = (cursor?: string) =>
-  getFeed("latest", undefined, cursor);
+export const getLatest = (cursor?: string, language = "en") =>
+  getFeed("latest", undefined, cursor, 12, language);
 
-export const getTrending = (cursor?: string) =>
-  getFeed("trending", undefined, cursor);
+export const getTrending = (cursor?: string, language = "en") =>
+  getFeed("trending", undefined, cursor, 12, language);
 
-export const getLocal = (geography: string, cursor?: string) =>
-  getFeed("local", geography, cursor);
+export const getLocal = (geography: string, cursor?: string, language = "en") =>
+  getFeed("local", geography, cursor, 12, language);
 
-export const getStory = cache((slug: string) =>
-  request<Story>(`/api/v1/portals/texas/stories/${encodeURIComponent(slug)}`),
+export const getStory = cache((slug: string, language = "en") =>
+  request<Story>(
+    `/api/v1/portals/texas/stories/${encodeURIComponent(slug)}?${new URLSearchParams({ language })}`,
+  ),
 );
 
 export type SearchPageData = {

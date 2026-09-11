@@ -26,7 +26,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
   return {
     title: `Local — ${data.label}`,
     description: `The latest published entertainment stories from ${data.label}.`,
-    alternates: { canonical: data.canonical_url },
+    alternates: { canonical: data.canonical_url, languages: data.alternates },
   };
 }
 

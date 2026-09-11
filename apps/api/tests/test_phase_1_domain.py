@@ -323,9 +323,13 @@ async def test_texas_seed_is_complete_and_idempotent(session: AsyncSession) -> N
     assert first.portal_created is True
     assert first.geographies_created == 3
     assert first.categories_created == len(INITIAL_CATEGORIES)
+    assert first.sample_content_created is True
+    assert first.sample_translation_created is True
     assert second.portal_created is False
     assert second.geographies_created == 0
     assert second.categories_created == 0
+    assert second.sample_content_created is False
+    assert second.sample_translation_created is False
     assert await session.scalar(select(func.count()).select_from(Portal)) == 1
     assert await session.scalar(select(func.count()).select_from(Category)) == len(
         INITIAL_CATEGORIES
@@ -337,4 +341,12 @@ async def test_texas_seed_is_complete_and_idempotent(session: AsyncSession) -> N
     assert texas is not None
     assert portal is not None
     assert portal.primary_geography_id == texas.id
-    assert portal.supported_languages == ["en"]
+    assert portal.supported_languages == ["en", "es"]
+
+    portal.default_language = "fr"
+    portal.supported_languages = [*portal.supported_languages, "fr"]
+    await session.commit()
+    third = await seed_texas(session)
+    assert third.portal_created is False
+    assert portal.default_language == "fr"
+    assert portal.supported_languages == ["en", "es", "fr"]

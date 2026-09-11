@@ -30,7 +30,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title: typeof story.seo.title === "string" ? story.seo.title : story.title,
     description,
-    alternates: { canonical: story.canonical_url },
+    alternates: { canonical: story.canonical_url, languages: story.alternates },
     openGraph: {
       title: story.title,
       description,

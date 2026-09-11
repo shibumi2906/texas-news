@@ -21,17 +21,23 @@ function identity(storage: Storage, key: string): string {
   return value;
 }
 
-function requestBody(question?: string) {
+function requestBody(language: string, question?: string) {
   return {
     ...(question ? { question } : {}),
-    language: "en",
+    language,
     event_id: crypto.randomUUID(),
     anonymous_id: identity(localStorage, "ted-anonymous-id"),
     session_id: identity(sessionStorage, "ted-session-id"),
   };
 }
 
-export function AiAssistant({ storySlug }: { storySlug?: string }) {
+export function AiAssistant({
+  storySlug,
+  language = "en",
+}: {
+  storySlug?: string;
+  language?: string;
+}) {
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [state, setState] = useState<"idle" | "loading" | "error" | "limited">(
@@ -49,7 +55,7 @@ export function AiAssistant({ storySlug }: { storySlug?: string }) {
           Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(requestBody(prompt)),
+        body: JSON.stringify(requestBody(language, prompt)),
       });
       if (response.status === 429) return setState("limited");
       if (!response.ok) throw new Error("AI answer unavailable");

@@ -29,10 +29,13 @@ def not_found(exc: PublicNotFoundError) -> Never:
 
 @router.get("/home", response_model=PublicHomepage)
 async def homepage(
-    request: Request, portal_slug: str, session: AsyncSession = DatabaseSession
+    request: Request,
+    portal_slug: str,
+    language: str | None = Query(default=None, min_length=2, max_length=35),
+    session: AsyncSession = DatabaseSession,
 ) -> PublicHomepage:
     try:
-        result = await PublicSiteService(session).homepage(portal_slug)
+        result = await PublicSiteService(session).homepage(portal_slug, language)
         ranked = await FeedService(
             session,
             request.app.state.redis,
@@ -40,7 +43,7 @@ async def homepage(
         ).page(
             portal_slug,
             FeedKind.TRENDING,
-            language=result.portal.default_language,
+            language=result.language,
             limit=6,
             cursor_value=None,
         )
@@ -57,10 +60,13 @@ async def category(
     category_slug: str,
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=50),
+    language: str | None = Query(default=None, min_length=2, max_length=35),
     session: AsyncSession = DatabaseSession,
 ) -> PublicCategoryPage:
     try:
-        return await PublicSiteService(session).category(portal_slug, category_slug, offset, limit)
+        return await PublicSiteService(session).category(
+            portal_slug, category_slug, offset, limit, language
+        )
     except PublicNotFoundError as exc:
         not_found(exc)
 
@@ -69,9 +75,10 @@ async def category(
 async def story(
     portal_slug: str,
     story_slug: str,
+    language: str | None = Query(default=None, min_length=2, max_length=35),
     session: AsyncSession = DatabaseSession,
 ) -> PublicStory:
     try:
-        return await PublicSiteService(session).story(portal_slug, story_slug)
+        return await PublicSiteService(session).story(portal_slug, story_slug, language)
     except PublicNotFoundError as exc:
         not_found(exc)

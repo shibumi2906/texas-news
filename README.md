@@ -128,7 +128,9 @@ docker compose exec api alembic upgrade head
 docker compose exec api python -m news_platform.seed
 ```
 
-The seed creates `World → United States → Texas`, the Texas portal, and the eleven initial categories. Re-running it does not create duplicates.
+The seed creates `World → United States → Texas`, the Texas portal, the eleven initial categories,
+and one portal-scoped bilingual EN/ES story for route, search, SEO, and rendering smoke tests.
+Re-running it does not create duplicates.
 
 ### PostgreSQL integration tests
 
@@ -359,8 +361,38 @@ excluded by the shared public eligibility policy.
 The `ai_search` and `ai_chat` portal flags, shared Redis rate limiter, `ai_query` behavioral event,
 structured output validation, provider fallback, telemetry, and content-derived cache are reused
 end to end. The search page provides AI Search plus trending/today shortcuts, while story pages add
-an on-demand **Ask about this story** panel. Multilingual delivery, AI administration, prompt/model
-A/B testing, and external web search remain deferred.
+an on-demand **Ask about this story** panel. AI administration, prompt/model A/B testing, and
+external web search remain deferred.
+
+## Phase 12 multilingual publishing
+
+The Texas portal now has backend-authoritative `default_language=en` and
+`supported_languages=[en, es]`. English URLs remain unchanged. Spanish public routes use an `/es`
+prefix, including `/es`, `/es/{category}`, `/es/local/{geography}`, `/es/search`, and
+`/es/story/{slug}`. Unsupported language prefixes and Spanish story URLs without a public Spanish
+representation return 404; English copy is never labeled as Spanish.
+
+`translations` stores a portal-scoped representation of one canonical `ContentItem`, with language,
+translated title/subtitle/description/body, source, review status, reviewer, and the source revision
+timestamp. Machine, reviewed, and editorial translations may render; outdated and failed rows do
+not. The canonical item continues to own publication lifecycle, geography, taxonomy, engagement,
+analytics, trending, and recommendation identity. This prevents translation rows from bypassing
+visibility rules or being counted as separate stories.
+
+Public APIs accept the requested language and return localized story summaries with canonical URLs
+and only the actually available story alternates. Generic page alternates cover every configured
+portal language. The frontend language switch changes the route and preserves story/category/local/
+search context. Next.js metadata emits canonical and `hreflang` alternates, and the document language
+is derived from the language-prefixed route.
+
+PostgreSQL search uses the translation's generated language-specific `tsvector` for Spanish while
+returning the canonical content ID. Feeds, Trending, Recommendations, and Phase 11 AI retrieval rank
+or select canonical items first and hydrate the requested representation afterward. Existing
+Integrator `language_versions` are materialized only for active, geography-matching portals that
+support the supplied language; no new wire fields or translation-generation pipeline were added.
+
+Migration `0013_phase_12_multilingual` creates the translation table and GIN index, enables EN/ES
+and the multilingual feature flag for the Texas seed portal, and preserves all Phase 0–11 data.
 
 ## One-command checks
 

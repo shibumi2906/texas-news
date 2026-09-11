@@ -44,6 +44,7 @@ from news_platform.modules.ingestion.domain.models import (
     IncomingPackageVersion,
     IntegratorConnection,
 )
+from news_platform.modules.localization.domain.models import Translation, TranslationStatus
 from news_platform.modules.media.domain.models import MediaAsset
 from news_platform.modules.portals.domain.models import Portal, PortalStatus
 from news_platform.modules.public_site.api.router import router as public_site_router
@@ -290,6 +291,48 @@ async def post_package(
     )
 
 
+async def add_multilingual_texas(session: Any) -> Portal:
+    country = GeographyNode(
+        type=GeographyType.COUNTRY,
+        name="United States",
+        slug="united-states",
+        country_code="US",
+        metadata_={},
+    )
+    session.add(country)
+    await session.flush()
+    texas = GeographyNode(
+        type=GeographyType.STATE_OR_PROVINCE,
+        name="Texas",
+        slug="united-states-texas",
+        country_code="US",
+        parent_id=country.id,
+        metadata_={},
+    )
+    session.add(texas)
+    await session.flush()
+    portal = Portal(
+        slug="texas",
+        name="Texas",
+        domain="texas.example",
+        status=PortalStatus.ACTIVE,
+        primary_geography_id=texas.id,
+        default_language="en",
+        supported_languages=["en", "es"],
+        timezone="America/Chicago",
+        branding={},
+        category_settings={},
+        ranking_settings={},
+        ai_settings={},
+        advertising_settings={},
+        seo_settings={},
+        feature_flags={},
+    )
+    session.add(portal)
+    await session.flush()
+    return portal
+
+
 async def test_create_duplicate_and_complete_domain_mapping(
     client: tuple[httpx.AsyncClient, async_sessionmaker[Any]],
 ) -> None:
@@ -328,6 +371,63 @@ async def test_create_duplicate_and_complete_domain_mapping(
         assert await session.scalar(select(func.count()).select_from(IncomingPackageVersion)) == 1
         assert await session.scalar(select(func.count()).select_from(ContentVersion)) == 1
         assert await session.scalar(select(func.count()).select_from(MediaAsset)) == 1
+
+
+async def test_language_versions_materialize_for_matching_supported_portal(
+    client: tuple[httpx.AsyncClient, async_sessionmaker[Any]],
+) -> None:
+    http, session_factory = client
+    async with session_factory() as session, session.begin():
+        await add_multilingual_texas(session)
+
+    response = await post_package(http, package())
+    assert response.status_code == 201, response.text
+    async with session_factory() as session:
+        translation = await session.scalar(select(Translation))
+        content = await session.scalar(select(ContentItem))
+        assert translation is not None and content is not None
+        assert translation.portal_id == (await session.scalar(select(Portal.id)))
+        assert translation.content_item_id == content.id
+        assert translation.language == "es"
+        assert translation.title == "Título"
+        assert translation.status is TranslationStatus.MACHINE
+
+
+async def test_translation_outdated_only_when_source_text_changes(
+    client: tuple[httpx.AsyncClient, async_sessionmaker[Any]],
+) -> None:
+    http, session_factory = client
+    async with session_factory() as session, session.begin():
+        await add_multilingual_texas(session)
+
+    first = package()
+    assert (await post_package(http, first)).status_code == 201
+    async with session_factory() as session, session.begin():
+        translation = await session.scalar(select(Translation))
+        assert translation is not None
+        translation.status = TranslationStatus.REVIEWED
+        original_source_updated_at = translation.source_updated_at
+
+    metadata_only = package(2, operation="updated")
+    metadata_only["content"] = deepcopy(first["content"])
+    metadata_only["categories"] = [{"slug": "music", "topic_id": str(TOPIC_ID), "label": "Music"}]
+    assert (await post_package(http, metadata_only)).status_code == 201
+    async with session_factory() as session, session.begin():
+        translation = await session.scalar(select(Translation))
+        assert translation is not None
+        assert translation.status is TranslationStatus.REVIEWED
+        assert translation.source_updated_at == original_source_updated_at
+        translation.status = TranslationStatus.EDITORIAL
+        translation.translation_source = "editorial"
+
+    source_change = package(3, operation="updated")
+    source_change["content"] = deepcopy(first["content"])
+    source_change["content"]["title"] = "A materially revised source headline"
+    assert (await post_package(http, source_change)).status_code == 201
+    async with session_factory() as session:
+        translation = await session.scalar(select(Translation))
+        assert translation is not None
+        assert translation.status is TranslationStatus.OUTDATED
 
 
 async def test_out_of_order_versions_never_regress_current_state(

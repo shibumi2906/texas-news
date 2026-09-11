@@ -4,7 +4,7 @@ import re
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from news_platform.modules.portals.domain.models import PortalStatus
 
@@ -53,3 +53,9 @@ class PortalCreate(BaseModel):
         if len(normalized) != len(set(normalized)):
             raise ValueError("supported languages must be unique")
         return normalized
+
+    @model_validator(mode="after")
+    def validate_language_configuration(self) -> PortalCreate:
+        if self.default_language not in self.supported_languages:
+            raise ValueError("default language must be supported")
+        return self

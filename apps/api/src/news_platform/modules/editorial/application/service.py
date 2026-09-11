@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from news_platform.modules.content.domain.models import (
@@ -23,6 +23,11 @@ from news_platform.modules.editorial.domain.policy import InvalidTransitionError
 from news_platform.modules.editorial.domain.schemas import EditorialEdit
 from news_platform.modules.editorial.infrastructure.repository import EditorialRepository
 from news_platform.modules.ingestion.domain.models import IncomingPackage
+from news_platform.modules.localization.domain.models import (
+    PUBLIC_TRANSLATION_STATUSES,
+    Translation,
+    TranslationStatus,
+)
 
 
 class EditorialService:
@@ -151,6 +156,14 @@ class EditorialService:
             )
         )
         content.has_editorial_override = True
+        await self.session.execute(
+            update(Translation)
+            .where(
+                Translation.content_item_id == content.id,
+                Translation.status.in_(PUBLIC_TRANSLATION_STATUSES),
+            )
+            .values(status=TranslationStatus.OUTDATED)
+        )
         await self._audit(content, actor, "edit", before, edit.reason)
         await self.session.flush()
         return content

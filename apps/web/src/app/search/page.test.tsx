@@ -10,6 +10,7 @@ const data: SearchPageData = {
     domain: "texas.example",
     timezone: "America/Chicago",
     default_language: "en",
+    supported_languages: ["en", "es"],
     canonical_url: "https://texas.example",
     branding: {},
     categories: [{ name: "Sports", slug: "sports" }],
@@ -23,6 +24,8 @@ const data: SearchPageData = {
       slug: "stable-slug",
       url: "/story/stable-slug",
       canonical_url: "https://texas.example/story/stable-slug",
+      language: "en",
+      alternates: { en: "https://texas.example/story/stable-slug" },
       content_type: "article",
       title: "Editorial Mavericks headline",
       subtitle: null,
@@ -68,6 +71,14 @@ describe("Search page", () => {
     expect(next.searchParams.get("cursor")).toBe("opaque-next");
     expect(next.searchParams.get("category")).toBe("sports");
     expect(next.searchParams.get("date_from")).toBe("2026-09-01");
+    const spanish = new URL(
+      screen.getByRole("link", { name: "Español" }).getAttribute("href")!,
+      "https://texas.example",
+    );
+    expect(spanish.pathname).toBe("/es/search");
+    expect(spanish.searchParams.get("q")).toBe("Mavericks");
+    expect(spanish.searchParams.get("category")).toBe("sports");
+    expect(spanish.searchParams.get("date_from")).toBe("2026-09-01");
     expect(new URL(fetchMock.mock.calls[0][0]).searchParams.get("limit")).toBe(
       "12",
     );

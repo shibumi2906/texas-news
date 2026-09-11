@@ -23,7 +23,6 @@ export default async function SearchPage({
     "date_from",
     "date_to",
     "cursor",
-    "language",
   ]) {
     if (typeof raw[key] === "string" && raw[key]) params[key] = raw[key];
   }
@@ -47,5 +46,7 @@ export default async function SearchPage({
             ? "Check your search text and dates. The start date must come before the end date."
             : "Search is temporarily unavailable. Please try again.";
   }
-  return <SearchView data={data} params={params} error={message} />;
+  return (
+    <SearchView data={data} params={params} error={message} language="en" />
+  );
 }

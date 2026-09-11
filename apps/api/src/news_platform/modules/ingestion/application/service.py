@@ -11,6 +11,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 from sqlalchemy import delete, func, select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from news_platform.modules.content.domain.models import (
@@ -49,7 +50,9 @@ from news_platform.modules.ingestion.domain.schemas import (
     PackageSourceRef,
 )
 from news_platform.modules.ingestion.infrastructure.repository import IngestionRepository
+from news_platform.modules.localization.domain.models import Translation, TranslationStatus
 from news_platform.modules.media.domain.models import MediaAsset, MediaStatus, MediaType
+from news_platform.modules.portals.domain.models import Portal, PortalStatus
 from news_platform.modules.taxonomy.domain.models import Category, Topic
 
 
@@ -141,10 +144,13 @@ class IngestionService:
 
         sources = [await self._upsert_source(source) for source in envelope.sources]
         content = await self._get_or_create_content(incoming_package, envelope, sources)
+        source_text_changed = await self._source_text_changed(content, envelope)
         await self._create_content_version(content, incoming_version, envelope)
 
         if advances_latest:
-            await self._apply_current_mapping(content, envelope, sources)
+            await self._apply_current_mapping(
+                content, envelope, sources, source_text_changed=source_text_changed
+            )
             incoming_package.latest_version = envelope.package_version
 
         await self.session.flush()
@@ -296,6 +302,8 @@ class IngestionService:
         content: ContentItem,
         envelope: CanonicalNewsPackageEnvelope,
         sources: list[Source],
+        *,
+        source_text_changed: bool,
     ) -> None:
         await self._clear_previous_mappings(content)
         primary_source = envelope.sources[0] if envelope.sources else None
@@ -359,6 +367,128 @@ class IngestionService:
                 "media_ids": [str(value) for value in media_ids],
             },
         }
+        await self._map_translations(content, envelope, source_text_changed=source_text_changed)
+
+    async def _source_text_changed(
+        self, content: ContentItem, envelope: CanonicalNewsPackageEnvelope
+    ) -> bool:
+        previous = await self.session.scalar(
+            select(ContentVersion)
+            .where(
+                ContentVersion.content_item_id == content.id,
+                ContentVersion.origin == ContentVersionOrigin.SOURCE,
+            )
+            .order_by(ContentVersion.source_revision.desc())
+            .limit(1)
+        )
+        if previous is None:
+            return False
+        return (
+            content.primary_language != envelope.content.language
+            or previous.title != envelope.content.title
+            or previous.metadata_.get("subtitle") != envelope.content.lead
+            or previous.description != (envelope.content.excerpt or envelope.content.summary)
+            or previous.body != envelope.content.body
+        )
+
+    async def _map_translations(
+        self,
+        content: ContentItem,
+        envelope: CanonicalNewsPackageEnvelope,
+        *,
+        source_text_changed: bool,
+    ) -> None:
+        if source_text_changed:
+            await self.session.execute(
+                sa_update(Translation)
+                .where(
+                    Translation.content_item_id == content.id,
+                    Translation.status.in_(
+                        (
+                            TranslationStatus.MACHINE,
+                            TranslationStatus.REVIEWED,
+                            TranslationStatus.EDITORIAL,
+                        )
+                    ),
+                )
+                .values(status=TranslationStatus.OUTDATED)
+            )
+        portals = list(
+            (
+                await self.session.scalars(
+                    select(Portal).where(Portal.status == PortalStatus.ACTIVE)
+                )
+            ).all()
+        )
+        source_updated_at = envelope.updated_at
+        for portal in portals:
+            if not await self._content_in_portal(content.id, portal):
+                continue
+            for key, variant in envelope.language_versions.items():
+                language = key.lower()
+                if (
+                    variant.language.lower() != language
+                    or language == content.primary_language
+                    or language not in portal.supported_languages
+                ):
+                    continue
+                translation = await self.session.scalar(
+                    select(Translation).where(
+                        Translation.portal_id == portal.id,
+                        Translation.content_item_id == content.id,
+                        Translation.language == language,
+                    )
+                )
+                values = {
+                    "title": variant.title,
+                    "subtitle": variant.lead,
+                    "description": variant.excerpt or variant.summary,
+                    "body": variant.body,
+                    "translation_source": "integrator",
+                    "status": TranslationStatus.MACHINE,
+                    "source_updated_at": source_updated_at,
+                }
+                if translation is None:
+                    self.session.add(
+                        Translation(
+                            portal_id=portal.id,
+                            content_item_id=content.id,
+                            language=language,
+                            **values,
+                        )
+                    )
+                elif translation.translation_source == "integrator":
+                    translated_text_changed = any(
+                        getattr(translation, field) != value
+                        for field, value in values.items()
+                        if field not in {"status", "source_updated_at"}
+                    )
+                    if source_text_changed or translated_text_changed:
+                        for field, value in values.items():
+                            setattr(translation, field, value)
+
+    async def _content_in_portal(self, content_id: UUID, portal: Portal) -> bool:
+        if portal.primary_geography_id is None:
+            return False
+        scope = (
+            select(GeographyNode.id)
+            .where(GeographyNode.id == portal.primary_geography_id)
+            .cte(name="translation_portal_geography", recursive=True)
+        )
+        scope = scope.union_all(
+            select(GeographyNode.id).join(scope, GeographyNode.parent_id == scope.c.id)
+        )
+        return (
+            await self.session.scalar(
+                select(ContentGeography.content_item_id)
+                .where(
+                    ContentGeography.content_item_id == content_id,
+                    ContentGeography.geography_id.in_(select(scope.c.id)),
+                )
+                .limit(1)
+            )
+            is not None
+        )
 
     async def _clear_previous_mappings(self, content: ContentItem) -> None:
         tracked = content.metadata_.get("ingestion_associations", {})

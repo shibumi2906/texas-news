@@ -18,6 +18,10 @@ from news_platform.modules.content.domain.models import (
 from news_platform.modules.engagement.domain.models import ContentEngagementCounter
 from news_platform.modules.feeds.domain.cursor import FeedCursor
 from news_platform.modules.geography.domain.models import GeographyNode
+from news_platform.modules.localization.domain.models import (
+    PUBLIC_TRANSLATION_STATUSES,
+    Translation,
+)
 from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.public_site.infrastructure.repository import (
     PublicContentRecord,
@@ -73,7 +77,7 @@ class FeedRepository:
         geography: GeographyNode | None = None,
     ) -> tuple[list[RankedContentRecord], bool]:
         statement = self.public.eligible_statement(portal, now).where(
-            ContentItem.primary_language == language
+            self.public.representation_available(portal, language)
         )
         if category is not None:
             statement = statement.where(
@@ -123,7 +127,7 @@ class FeedRepository:
             ).all()
         )
         has_more = len(contents) > limit
-        records = await self.public.hydrate(contents[:limit])
+        records = await self.public.hydrate(contents[:limit], portal, language)
         return [RankedContentRecord(record) for record in records], has_more
 
     async def cached_items_are_current(
@@ -139,8 +143,24 @@ class FeedRepository:
         if not items:
             return True
         identities = [item[0] for item in items]
-        statement = self.public.eligible_statement(portal, now).where(
-            ContentItem.id.in_(identities), ContentItem.primary_language == language
+        effective_updated_at = func.coalesce(Translation.updated_at, ContentItem.updated_at).label(
+            "effective_updated_at"
+        )
+        statement = (
+            self.public.eligible_statement(portal, now)
+            .outerjoin(
+                Translation,
+                and_(
+                    Translation.content_item_id == ContentItem.id,
+                    Translation.portal_id == portal.id,
+                    Translation.language == language,
+                    Translation.status.in_(PUBLIC_TRANSLATION_STATUSES),
+                ),
+            )
+            .where(
+                ContentItem.id.in_(identities),
+                self.public.representation_available(portal, language),
+            )
         )
         if category is not None:
             statement = statement.where(
@@ -172,10 +192,10 @@ class FeedRepository:
             )
         rows = (
             await self.session.execute(
-                statement.with_only_columns(ContentItem.id, ContentItem.updated_at)
+                statement.with_only_columns(ContentItem.id, effective_updated_at)
             )
         ).all()
-        return {(row.id, row.updated_at) for row in rows} == set(items)
+        return {(row.id, row.effective_updated_at) for row in rows} == set(items)
 
     async def trending(
         self,
@@ -222,7 +242,7 @@ class FeedRepository:
             self.public.eligible_statement(portal, now)
             .with_only_columns(ContentItem, score)
             .outerjoin(counters, counters.content_item_id == ContentItem.id)
-            .where(ContentItem.primary_language == language)
+            .where(self.public.representation_available(portal, language))
         )
         if cursor is not None:
             if cursor.score is None:
@@ -251,7 +271,7 @@ class FeedRepository:
         ).all()
         has_more = len(rows) > limit
         page_rows = rows[:limit]
-        records = await self.public.hydrate([row[0] for row in page_rows])
+        records = await self.public.hydrate([row[0] for row in page_rows], portal, language)
         return [
             RankedContentRecord(record=record, score=Decimal(str(row[1])))
             for record, row in zip(records, page_rows, strict=True)

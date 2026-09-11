@@ -7,36 +7,51 @@ export function SearchView({
   data,
   params,
   error,
+  language = data?.language ?? "en",
 }: {
   data?: SearchPageData;
   params: Record<string, string>;
   error?: string;
+  language?: string;
 }) {
   const restart = new URLSearchParams(params);
   restart.delete("cursor");
   const next = new URLSearchParams(restart);
   if (data?.next_cursor) next.set("cursor", data.next_cursor);
+  const portal = data?.portal;
+  const base =
+    portal && language !== portal.default_language ? `/${language}` : "";
+  const alternateQuery = restart.toString();
+  const alternates = portal
+    ? Object.fromEntries(
+        portal.supported_languages.map((item) => [
+          item,
+          `${portal.canonical_url}${item === portal.default_language ? "" : `/${item}`}/search${alternateQuery ? `?${alternateQuery}` : ""}`,
+        ]),
+      )
+    : undefined;
   return (
     <>
-      {data && <SiteHeader portal={data.portal} />}
+      {data && (
+        <SiteHeader
+          portal={data.portal}
+          language={language}
+          alternates={alternates}
+        />
+      )}
       <main className="page-width listing-page">
         <h1>Search Texas stories</h1>
         <p>
           Find published stories by keyword, entity, location, category or
           publication date.
         </p>
-        <AiAssistant />
+        <AiAssistant language={language} />
         <form
-          action="/search"
+          action={`${base}/search`}
           method="get"
           className="search-form"
           role="search"
         >
-          <input
-            type="hidden"
-            name="language"
-            value={params.language || "en"}
-          />
           <label>
             Keywords
             <input
@@ -91,12 +106,12 @@ export function SearchView({
             <input name="date_to" type="date" defaultValue={params.date_to} />
           </label>
           <button type="submit">Search</button>
-          <Link href="/search">Clear filters</Link>
+          <Link href={`${base}/search`}>Clear filters</Link>
         </form>
         {error ? (
           <div role="alert">
             <p>{error}</p>
-            <Link href={`/search?${restart}`}>Restart search</Link>
+            <Link href={`${base}/search?${restart}`}>Restart search</Link>
           </div>
         ) : (
           <>
@@ -115,7 +130,7 @@ export function SearchView({
               <p>No stories found. Try other words or fewer filters.</p>
             )}
             {data?.next_cursor && (
-              <Link className="pagination" href={`/search?${next}`}>
+              <Link className="pagination" href={`${base}/search?${next}`}>
                 Next results
               </Link>
             )}

@@ -94,7 +94,6 @@ def _strict_answer(raw: str) -> GroundedAnswerOutput:
 
 
 def _content_source(record: PublicContentRecord, max_tokens: int) -> dict[str, Any]:
-    content = record.content
     remaining = max(0, max_tokens * 4 - 200)
 
     def bounded(value: str | None) -> str | None:
@@ -106,11 +105,11 @@ def _content_source(record: PublicContentRecord, max_tokens: int) -> dict[str, A
         return clipped
 
     return {
-        "title": bounded(content.title),
-        "subtitle": bounded(content.subtitle),
-        "description": bounded(content.description),
-        "body": bounded(content.body or ""),
-        "language": content.primary_language,
+        "title": bounded(record.title),
+        "subtitle": bounded(record.subtitle),
+        "description": bounded(record.description),
+        "body": bounded(record.body or ""),
+        "language": record.language,
     }
 
 
@@ -118,17 +117,17 @@ def _content_hash(record: PublicContentRecord) -> str:
     content = record.content
     payload = {
         "id": str(content.id),
-        "title": content.title,
-        "subtitle": content.subtitle,
-        "description": content.description,
-        "body": content.body,
-        "language": content.primary_language,
+        "title": record.title,
+        "subtitle": record.subtitle,
+        "description": record.description,
+        "body": record.body,
+        "language": record.language,
         "editorial_status": content.status.value,
         "upstream_status": content.upstream_status.value,
         "site_published_at": (
             content.site_published_at.isoformat() if content.site_published_at else None
         ),
-        "effective_updated_at": content.updated_at.isoformat(),
+        "effective_updated_at": record.representation_updated_at.isoformat(),
     }
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
@@ -208,8 +207,8 @@ class AIService:
         portal = await public_service.repository.get_portal(portal_slug)
         if portal is None or language not in portal.supported_languages:
             raise AIResourceNotFoundError("story not found")
-        record = await public_service.repository.get_story(portal, story_slug, self.now)
-        if record is None or record.content.primary_language != language:
+        record = await public_service.repository.get_story(portal, story_slug, self.now, language)
+        if record is None:
             raise AIResourceNotFoundError("story not found")
 
         task = TaskManager(self.settings).get("story_summary")
@@ -365,7 +364,9 @@ class AIService:
             page = await SearchService(public, PostgresSearchBackend(self.session)).page(
                 portal_slug, SearchQuery(q=terms, language=payload.language, limit=5)
             )
-            records = await self._records(portal, public, [item.slug for item in page.items])
+            records = await self._records(
+                portal, public, [item.slug for item in page.items], payload.language
+            )
         result = await self._grounded_answer(
             "ai_search",
             portal,
@@ -382,8 +383,8 @@ class AIService:
     ) -> AIAnswerResponse:
         portal, public = await self._portal(portal_slug, payload.language, "ai_chat")
         await self._limit(redis, portal, payload.anonymous_id, "story_question")
-        record = await public.repository.get_story(portal, story_slug, self.now)
-        if record is None or record.content.primary_language != payload.language:
+        record = await public.repository.get_story(portal, story_slug, self.now, payload.language)
+        if record is None:
             raise AIResourceNotFoundError("story not found")
         result = await self._grounded_answer(
             "story_question",
@@ -412,7 +413,9 @@ class AIService:
             limit=5,
             cursor_value=None,
         )
-        records = await self._records(portal, public, [item.slug for item in page.items])
+        records = await self._records(
+            portal, public, [item.slug for item in page.items], payload.language
+        )
         result = await self._grounded_answer(
             "trending_digest",
             portal,
@@ -475,11 +478,15 @@ class AIService:
         )
 
     async def _records(
-        self, portal: Portal, public: PublicSiteService, slugs: list[str]
+        self,
+        portal: Portal,
+        public: PublicSiteService,
+        slugs: list[str],
+        language: str,
     ) -> list[PublicContentRecord]:
         records: list[PublicContentRecord] = []
         for slug in slugs:
-            record = await public.repository.get_story(portal, slug, self.now)
+            record = await public.repository.get_story(portal, slug, self.now, language)
             if record is not None:
                 records.append(record)
         return records
@@ -551,7 +558,7 @@ class AIService:
             task,
             content_hash,
             str(portal.id),
-            records[0].content.primary_language,
+            records[0].language,
             task.primary_model,
         )
         await self.repository.lock_cache_key(lock_key)
@@ -564,7 +571,7 @@ class AIService:
                     task,
                     content_hash,
                     str(portal.id),
-                    records[0].content.primary_language,
+                    records[0].language,
                     cached_model,
                 ),
                 self.now,
@@ -650,7 +657,7 @@ class AIService:
             task,
             content_hash,
             str(portal.id),
-            records[0].content.primary_language,
+            records[0].language,
             f"{selected_provider}:{selected_model}",
         )
         await self.repository.remove_expired_result(cache_key, self.now)
@@ -660,7 +667,7 @@ class AIService:
                 task=task.task_name,
                 content_id=records[0].content.id,
                 portal_id=portal.id,
-                language=records[0].content.primary_language,
+                language=records[0].language,
                 content_hash=content_hash,
                 provider=selected_provider,
                 model=selected_model,
@@ -691,15 +698,14 @@ class AIService:
         items: list[dict[str, Any]] = []
         per_item = max(200, remaining // len(records))
         for record in records:
-            content = record.content
             item = {
-                "id": str(content.id),
-                "title": content.title,
-                "subtitle": content.subtitle,
-                "description": content.description,
-                "body": (content.body or "")[:per_item],
-                "published_at": content.site_published_at.isoformat()
-                if content.site_published_at
+                "id": str(record.content.id),
+                "title": record.title,
+                "subtitle": record.subtitle,
+                "description": record.description,
+                "body": (record.body or "")[:per_item],
+                "published_at": record.content.site_published_at.isoformat()
+                if record.content.site_published_at
                 else None,
             }
             items.append(item)
@@ -750,7 +756,7 @@ class AIService:
     ) -> StorySummaryResponse:
         story = public_service.story_summary(portal, record)
         return StorySummaryResponse(
-            language=record.content.primary_language,
+            language=record.language,
             bullets=output.bullets,
             generated=provider_generated,
             fallback_used=fallback_used,

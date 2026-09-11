@@ -17,6 +17,50 @@ function primaryMedia(story: StorySummary): Media | undefined {
   return story.media[0];
 }
 
+function prefix(language: string, portal: Portal) {
+  return language === portal.default_language ? "" : `/${language}`;
+}
+
+function localPath(url: string) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return url;
+  }
+}
+
+const copy = {
+  en: {
+    home: "Home",
+    latest: "Latest",
+    search: "Search",
+    trending: "Trending",
+    forYou: "For You",
+    following: "Following",
+    local: "Local",
+    viewAll: "View all",
+    share: "Share",
+    related: "Related stories",
+  },
+  es: {
+    home: "Inicio",
+    latest: "Últimas",
+    search: "Buscar",
+    trending: "Tendencias",
+    forYou: "Para ti",
+    following: "Siguiendo",
+    local: "Local",
+    viewAll: "Ver todo",
+    share: "Compartir",
+    related: "Historias relacionadas",
+  },
+} as const;
+
+function ui(language: string) {
+  return language === "es" ? copy.es : copy.en;
+}
+
 function MediaFrame({ story }: { story: StorySummary; priority?: boolean }) {
   const media = primaryMedia(story);
   const source = media?.thumbnail_url ?? media?.url;
@@ -46,7 +90,7 @@ function StoryMeta({ story }: { story: StorySummary }) {
     <p className="story-meta">
       {story.geography[0]?.name ?? "Texas"} ·{" "}
       <time dateTime={story.published_at}>
-        {new Intl.DateTimeFormat("en-US", {
+        {new Intl.DateTimeFormat(story.language === "es" ? "es-US" : "en-US", {
           month: "short",
           day: "numeric",
           year: "numeric",
@@ -57,13 +101,23 @@ function StoryMeta({ story }: { story: StorySummary }) {
   );
 }
 
-export function SiteHeader({ portal }: { portal: Portal }) {
+export function SiteHeader({
+  portal,
+  language = portal.default_language,
+  alternates,
+}: {
+  portal: Portal;
+  language?: string;
+  alternates?: Record<string, string>;
+}) {
+  const base = prefix(language, portal);
+  const labels = ui(language);
   return (
     <header className="site-header">
       <div className="header-top page-width">
         <Link
           className="brand"
-          href="/"
+          href={base || "/"}
           aria-label="Texas Entertainment Daily home"
         >
           <span className="brand-star">★</span>
@@ -78,17 +132,32 @@ export function SiteHeader({ portal }: { portal: Portal }) {
             : "Stories, culture and entertainment across the Lone Star State"}
         </p>
       </div>
+      <nav className="language-switch" aria-label="Language">
+        {portal.supported_languages.map((item) => {
+          const target = alternates?.[item];
+          return target ? (
+            <Link
+              key={item}
+              href={localPath(target)}
+              hrefLang={item}
+              aria-current={item === language ? "page" : undefined}
+            >
+              {item === "es" ? "Español" : "English"}
+            </Link>
+          ) : null;
+        })}
+      </nav>
       <nav className="category-nav" aria-label="Primary navigation">
         <div className="page-width nav-scroll">
-          <Link href="/">Home</Link>
-          <Link href="/latest">Latest</Link>
-          <Link href="/search">Search</Link>
-          <Link href="/trending">Trending</Link>
-          <Link href="/for-you">For You</Link>
-          <Link href="/following">Following</Link>
-          <Link href="/local/texas">Local</Link>
+          <Link href={base || "/"}>{labels.home}</Link>
+          <Link href={`${base}/latest`}>{labels.latest}</Link>
+          <Link href={`${base}/search`}>{labels.search}</Link>
+          <Link href={`${base}/trending`}>{labels.trending}</Link>
+          <Link href={`${base}/for-you`}>{labels.forYou}</Link>
+          <Link href={`${base}/following`}>{labels.following}</Link>
+          <Link href={`${base}/local/texas`}>{labels.local}</Link>
           {portal.categories.map((category) => (
-            <Link href={`/${category.slug}`} key={category.slug}>
+            <Link href={`${base}/${category.slug}`} key={category.slug}>
               {category.name}
             </Link>
           ))}
@@ -122,11 +191,19 @@ export function StoryCard({
   );
 }
 
-function SectionHeading({ title, href }: { title: string; href?: string }) {
+function SectionHeading({
+  title,
+  href,
+  language = "en",
+}: {
+  title: string;
+  href?: string;
+  language?: string;
+}) {
   return (
     <div className="section-heading">
       <h2>{title}</h2>
-      {href ? <Link href={href}>View all</Link> : null}
+      {href ? <Link href={href}>{ui(language).viewAll}</Link> : null}
     </div>
   );
 }
@@ -149,7 +226,11 @@ export function HomeView({ data }: { data: Homepage }) {
   );
   return (
     <>
-      <SiteHeader portal={data.portal} />
+      <SiteHeader
+        portal={data.portal}
+        language={data.language}
+        alternates={data.alternates}
+      />
       <main className="page-width home-layout">
         {!data.hero ? (
           <EmptyNewsroom />
@@ -171,7 +252,14 @@ export function HomeView({ data }: { data: Homepage }) {
                 </div>
               </article>
               <aside className="trending-panel">
-                <SectionHeading title="Trending in Texas" />
+                <SectionHeading
+                  title={
+                    data.language === "es"
+                      ? "Tendencias en Texas"
+                      : "Trending in Texas"
+                  }
+                  language={data.language}
+                />
                 {data.trending.length ? (
                   <ol>
                     {data.trending.map((story) => (
@@ -199,7 +287,8 @@ export function HomeView({ data }: { data: Homepage }) {
               >
                 <SectionHeading
                   title={section.category.name}
-                  href={`/${section.category.slug}`}
+                  href={`${prefix(data.language, data.portal)}/${section.category.slug}`}
+                  language={data.language}
                 />
                 <div className="card-grid">
                   {section.items.map((story) => (
@@ -244,7 +333,11 @@ export function FeedView({
 }) {
   return (
     <>
-      <SiteHeader portal={data.portal} />
+      <SiteHeader
+        portal={data.portal}
+        language={data.language}
+        alternates={data.alternates}
+      />
       <main className="page-width listing-page">
         <div className="page-kicker">Explore Texas</div>
         <h1>{title}</h1>
@@ -285,7 +378,7 @@ function ShareControls({ story }: { story: Story }) {
   const encodedTitle = encodeURIComponent(story.title);
   return (
     <nav className="share-controls" aria-label="Share this story">
-      <span>Share</span>
+      <span>{ui(story.language).share}</span>
       <a href={`https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`}>
         Facebook
       </a>
@@ -303,7 +396,11 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
   const paragraphs = story.body?.split(/\n\s*\n/).filter(Boolean) ?? [];
   return (
     <>
-      <SiteHeader portal={portal} />
+      <SiteHeader
+        portal={portal}
+        language={story.language}
+        alternates={story.alternates}
+      />
       <main className="page-width story-page">
         <article>
           <header className="story-header">
@@ -342,11 +439,8 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
             ) : null}
           </div>
           <ShareControls story={story} />
-          <AiStorySummary
-            storySlug={story.slug}
-            language={story.portal.default_language}
-          />
-          <AiAssistant storySlug={story.slug} />
+          <AiStorySummary storySlug={story.slug} language={story.language} />
+          <AiAssistant storySlug={story.slug} language={story.language} />
           <div className="story-body">
             {paragraphs.length ? (
               paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)
@@ -356,7 +450,10 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
           </div>
           <footer className="story-taxonomy">
             {story.categories.map((category) => (
-              <Link href={`/${category.slug}`} key={category.slug}>
+              <Link
+                href={`${prefix(story.language, portal)}/${category.slug}`}
+                key={category.slug}
+              >
                 {category.name}
               </Link>
             ))}
@@ -371,7 +468,10 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
         </article>
         {story.related.length ? (
           <aside className="related-stories">
-            <SectionHeading title="Related stories" />
+            <SectionHeading
+              title={ui(story.language).related}
+              language={story.language}
+            />
             <div className="related-grid">
               {story.related.map((item) => (
                 <StoryCard story={item} compact key={item.id} />

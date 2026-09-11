@@ -25,6 +25,8 @@ from news_platform.modules.community.application import service as community_ser
 from news_platform.modules.community.domain.models import Follow
 from news_platform.modules.content.domain.models import ContentEntity, ContentStatus
 from news_platform.modules.entities.domain.models import Entity, EntityType
+from news_platform.modules.localization.domain.models import Translation, TranslationStatus
+from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.recommendations.api.router import feed_router, router
 from news_platform.modules.recommendations.application import (
     service as recommendation_service_module,
@@ -167,6 +169,33 @@ async def test_cold_start_is_deterministic_and_interests_change_ranking(runtime:
     assert personalized.json()["items"][0]["id"] == str(domain["music_old"].id)
     async with factory() as session:
         assert await session.scalar(select(RecommendationGeneration.generation)) == 1
+
+
+async def test_spanish_recommendation_hydrates_one_canonical_story(runtime: Any) -> None:
+    client, factory, domain = runtime
+    await register(client)
+    async with factory() as session, session.begin():
+        portal = await session.scalar(select(Portal).where(Portal.slug == "texas"))
+        assert portal is not None
+        session.add(
+            Translation(
+                portal_id=portal.id,
+                content_item_id=domain["sports_new"].id,
+                language="es",
+                title="Recomendado en Texas",
+                description="Una recomendación localizada.",
+                body="Contenido en español.",
+                translation_source="editorial",
+                status=TranslationStatus.EDITORIAL,
+                source_updated_at=NOW,
+            )
+        )
+    response = await client.get(feed_path("for-you"), params={"language": "es", "limit": 10})
+    assert response.status_code == 200, response.text
+    assert [(item["id"], item["language"]) for item in response.json()["items"]] == [
+        (str(domain["sports_new"].id), "es")
+    ]
+    assert response.json()["items"][0]["title"] == "Recomendado en Texas"
 
 
 async def test_following_cursor_is_user_bound_and_invalidated_by_follow_change(

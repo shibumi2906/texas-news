@@ -385,7 +385,7 @@ class RecommendationFeedService:
             )
         else:
             raise ValueError("unsupported personalized feed")
-        records = await self.public.repository.hydrate(contents)
+        records = await self.public.repository.hydrate(contents, auth.portal, language)
         categories = await self.public.repository.portal_categories(auth.portal)
         next_cursor = None
         if has_more and contents:
@@ -412,8 +412,17 @@ class RecommendationFeedService:
             language=language,
             canonical_url=(
                 f"{portal_view.canonical_url}/"
+                f"{'' if language == auth.portal.default_language else f'{language}/'}"
                 f"{'for-you' if feed == FeedKind.FOR_YOU else 'following'}"
             ),
+            alternates={
+                item_language: self.public._localized_url(
+                    auth.portal,
+                    item_language,
+                    f"/{'for-you' if feed == FeedKind.FOR_YOU else 'following'}",
+                )
+                for item_language in auth.portal.supported_languages
+            },
             items=[self.public.story_summary(auth.portal, record) for record in records],
             next_cursor=next_cursor,
         )
@@ -554,7 +563,7 @@ class RecommendationFeedService:
         statement = (
             self.public.repository.eligible_statement(auth.portal, snapshot)
             .with_only_columns(ContentItem, score)
-            .where(ContentItem.primary_language == language)
+            .where(self.public.repository.representation_available(auth.portal, language))
         )
         if cursor:
             if cursor.score is None:
@@ -598,7 +607,7 @@ class RecommendationFeedService:
             self._target_match(Follow.target_type, Follow.target_id),
         )
         statement = self.public.repository.eligible_statement(auth.portal, snapshot).where(
-            ContentItem.primary_language == language, matches
+            self.public.repository.representation_available(auth.portal, language), matches
         )
         if cursor:
             statement = statement.where(

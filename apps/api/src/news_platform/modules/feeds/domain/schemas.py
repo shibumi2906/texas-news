@@ -22,5 +22,6 @@ class PublicFeedPage(BaseModel):
     label: str
     language: str
     canonical_url: str
+    alternates: dict[str, str]
     items: list[PublicStorySummary]
     next_cursor: str | None

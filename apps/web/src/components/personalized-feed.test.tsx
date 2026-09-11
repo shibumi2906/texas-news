@@ -9,6 +9,7 @@ const portal = {
   domain: "texas.example",
   timezone: "America/Chicago",
   default_language: "en",
+  supported_languages: ["en", "es"],
   canonical_url: "https://texas.example",
   branding: {},
   categories: [{ name: "Music", slug: "music" }],
@@ -52,12 +53,20 @@ describe("PersonalizedFeed", () => {
             label: "For You",
             language: "en",
             canonical_url: "https://texas.example/for-you",
+            alternates: {
+              en: "https://texas.example/for-you",
+              es: "https://texas.example/es/for-you",
+            },
             items: [
               {
                 id: "1",
                 slug: "recommended",
                 url: "/story/recommended",
                 canonical_url: "https://texas.example/story/recommended",
+                language: "en",
+                alternates: {
+                  en: "https://texas.example/story/recommended",
+                },
                 content_type: "article",
                 title: "Recommended in Texas",
                 subtitle: null,

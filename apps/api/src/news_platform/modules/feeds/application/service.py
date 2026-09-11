@@ -133,13 +133,22 @@ class FeedService:
             has_more,
         )
         portal_view = self.public.portal_view(portal, categories)
+        localized_path = f"{'' if language == portal.default_language else f'/{language}'}{path}"
         page = PublicFeedPage(
             portal=portal_view,
             feed=feed,
             scope=None if normalized_scope == "all" else normalized_scope,
             label=label,
             language=language,
-            canonical_url=f"{portal_view.canonical_url}{path}",
+            canonical_url=f"{portal_view.canonical_url}{localized_path}",
+            alternates={
+                item_language: (
+                    f"{portal_view.canonical_url}"
+                    f"{'' if item_language == portal.default_language else f'/{item_language}'}"
+                    f"{path}"
+                )
+                for item_language in portal.supported_languages
+            },
             items=[self.public.story_summary(portal, item.record) for item in records],
             next_cursor=next_cursor,
         )

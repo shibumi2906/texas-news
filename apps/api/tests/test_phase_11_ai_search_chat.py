@@ -26,6 +26,7 @@ from news_platform.modules.ai.infrastructure.providers import LocalSummaryAdapte
 from news_platform.modules.analytics.domain.models import BehaviorEvent
 from news_platform.modules.content.domain.models import ContentStatus
 from news_platform.modules.engagement.domain.models import ContentEngagementCounter
+from news_platform.modules.localization.domain.models import Translation, TranslationStatus
 from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.search.domain.models import SearchGeneration
 
@@ -258,6 +259,42 @@ async def test_ai_search_is_grounded_isolated_and_records_analytics(phase11_doma
             "source_count": 1,
         }
         assert execution is not None and execution.provider == "local"
+
+
+async def test_ai_search_uses_spanish_translation_with_canonical_identity(
+    phase11_domain: Any,
+) -> None:
+    factory, domain = phase11_domain
+    async with factory() as session, session.begin():
+        portal = await session.scalar(select(Portal).where(Portal.slug == "texas"))
+        assert portal is not None
+        session.add(
+            Translation(
+                portal_id=portal.id,
+                content_item_id=domain["current"].id,
+                language="es",
+                title="Los Mavericks anuncian un concierto",
+                description="El concierto será el viernes en Dallas.",
+                body="Los Mavericks confirmaron el concierto del viernes.",
+                translation_source="editorial",
+                status=TranslationStatus.EDITORIAL,
+                source_updated_at=datetime.now(UTC),
+            )
+        )
+    request = payload(1190, "¿Qué concierto será el viernes?")
+    request["language"] = "es"
+    client, _redis = await make_client(factory)
+    async with client:
+        response = await client.post("/api/v1/portals/texas/ai/search", json=request)
+    assert response.status_code == 200, response.text
+    assert response.json()["sources"] == [
+        {
+            "content_id": str(domain["current"].id),
+            "title": "Los Mavericks anuncian un concierto",
+            "url": f"/es/story/{domain['current'].slug}",
+            "canonical_url": f"https://texas.example/es/story/{domain['current'].slug}",
+        }
+    ]
 
 
 async def test_ai_search_returns_explicit_insufficient_evidence(phase11_domain: Any) -> None:

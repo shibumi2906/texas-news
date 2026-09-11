@@ -10,6 +10,7 @@ const portal: Portal = {
   domain: "texas.example",
   timezone: "America/Chicago",
   default_language: "en",
+  supported_languages: ["en", "es"],
   canonical_url: "https://texas.example",
   branding: {},
   categories: [
@@ -23,6 +24,11 @@ const summary: StorySummary = {
   slug: "austin-music",
   url: "/story/austin-music",
   canonical_url: "https://texas.example/story/austin-music",
+  language: "en",
+  alternates: {
+    en: "https://texas.example/story/austin-music",
+    es: "https://texas.example/es/story/austin-music",
+  },
   content_type: "article",
   title: "Austin music takes center stage",
   subtitle: "A Texas original",
@@ -40,6 +46,12 @@ describe("Home", () => {
   it("renders the public hero, navigation, trending and category sections", () => {
     const data: Homepage = {
       portal,
+      language: "en",
+      canonical_url: "https://texas.example",
+      alternates: {
+        en: "https://texas.example",
+        es: "https://texas.example/es",
+      },
       hero: summary,
       trending: [{ ...summary, id: "2", title: "Texas tour announced" }],
       category_sections: [
@@ -75,6 +87,12 @@ describe("Home", () => {
       <HomeView
         data={{
           portal,
+          language: "en",
+          canonical_url: "https://texas.example",
+          alternates: {
+            en: "https://texas.example",
+            es: "https://texas.example/es",
+          },
           hero: null,
           trending: [],
           category_sections: [],
@@ -99,6 +117,10 @@ describe("public detail pages", () => {
           label: "Music",
           language: "en",
           canonical_url: "https://texas.example/music",
+          alternates: {
+            en: "https://texas.example/music",
+            es: "https://texas.example/es/music",
+          },
           items: [summary],
           next_cursor: "opaque-cursor",
         }}
@@ -110,6 +132,39 @@ describe("public detail pages", () => {
     expect(screen.getByRole("link", { name: "Older →" })).toHaveAttribute(
       "href",
       "/music?cursor=opaque-cursor",
+    );
+  });
+
+  it("renders a context-preserving EN/ES switch for translated stories", () => {
+    const story: Story = {
+      ...summary,
+      language: "es",
+      url: "/es/story/austin-music",
+      canonical_url: "https://texas.example/es/story/austin-music",
+      title: "La música de Austin ocupa el escenario",
+      portal,
+      body: "Texto en español.",
+      original_url: null,
+      entities: [],
+      seo: {},
+      related: [],
+    };
+    render(<StoryView story={story} portal={portal} />);
+    expect(screen.getByRole("link", { name: "English" })).toHaveAttribute(
+      "href",
+      "/story/austin-music",
+    );
+    expect(screen.getByRole("link", { name: "Español" })).toHaveAttribute(
+      "href",
+      "/es/story/austin-music",
+    );
+    expect(screen.getByRole("link", { name: "Español" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("link", { name: "Inicio" })).toHaveAttribute(
+      "href",
+      "/es",
     );
   });
 

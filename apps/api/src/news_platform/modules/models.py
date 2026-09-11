@@ -36,6 +36,7 @@ from news_platform.modules.ingestion.domain.models import (
     IncomingPackageVersion,
     IntegratorConnection,
 )
+from news_platform.modules.localization.domain.models import Translation
 from news_platform.modules.media.domain.models import MediaAsset
 from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.recommendations.domain.models import (
@@ -84,6 +85,7 @@ __all__ = [
     "Source",
     "SearchGeneration",
     "Topic",
+    "Translation",
     "User",
     "UserAffinity",
     "UserIdentity",

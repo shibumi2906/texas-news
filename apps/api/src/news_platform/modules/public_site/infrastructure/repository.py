@@ -18,6 +18,10 @@ from news_platform.modules.content.domain.models import (
 )
 from news_platform.modules.entities.domain.models import Entity
 from news_platform.modules.geography.domain.models import GeographyNode
+from news_platform.modules.localization.domain.models import (
+    PUBLIC_TRANSLATION_STATUSES,
+    Translation,
+)
 from news_platform.modules.media.domain.models import MediaAsset, MediaStatus, MediaType
 from news_platform.modules.portals.domain.models import Portal, PortalStatus
 from news_platform.modules.public_site.domain.policy import public_content_predicates
@@ -27,11 +31,34 @@ from news_platform.modules.taxonomy.domain.models import Category, TaxonomyStatu
 @dataclass
 class PublicContentRecord:
     content: ContentItem
+    language: str = "en"
+    translation: Translation | None = None
     source: Source | None = None
     categories: list[Category] = field(default_factory=list)
     geographies: list[GeographyNode] = field(default_factory=list)
     entities: list[Entity] = field(default_factory=list)
     media: list[MediaAsset] = field(default_factory=list)
+    available_languages: set[str] = field(default_factory=set)
+
+    @property
+    def title(self) -> str:
+        return self.translation.title if self.translation else self.content.title
+
+    @property
+    def subtitle(self) -> str | None:
+        return self.translation.subtitle if self.translation else self.content.subtitle
+
+    @property
+    def description(self) -> str | None:
+        return self.translation.description if self.translation else self.content.description
+
+    @property
+    def body(self) -> str | None:
+        return self.translation.body if self.translation else self.content.body
+
+    @property
+    def representation_updated_at(self) -> datetime:
+        return self.translation.updated_at if self.translation else self.content.updated_at
 
 
 class PublicSiteRepository:
@@ -100,6 +127,19 @@ class PublicSiteRepository:
     def eligible_statement(self, portal: Portal, now: datetime) -> Any:
         return self._eligible_statement(portal, now)
 
+    @staticmethod
+    def representation_available(portal: Portal, language: str) -> Any:
+        return (ContentItem.primary_language == language) | exists(
+            select(Translation.id)
+            .where(
+                Translation.content_item_id == ContentItem.id,
+                Translation.portal_id == portal.id,
+                Translation.language == language,
+                Translation.status.in_(PUBLIC_TRANSLATION_STATUSES),
+            )
+            .correlate(ContentItem)
+        )
+
     async def list_content(
         self,
         portal: Portal,
@@ -110,8 +150,11 @@ class PublicSiteRepository:
         exclude_id: UUID | None = None,
         offset: int = 0,
         limit: int = 20,
+        language: str,
     ) -> tuple[list[PublicContentRecord], int]:
-        statement = self._eligible_statement(portal, now)
+        statement = self._eligible_statement(portal, now).where(
+            self.representation_available(portal, language)
+        )
         if category_id is not None:
             statement = statement.where(
                 exists(
@@ -137,7 +180,7 @@ class PublicSiteRepository:
                 )
             ).all()
         )
-        return await self._hydrate(items), total or 0
+        return await self._hydrate(items, portal, language), total or 0
 
     async def list_content_window(
         self,
@@ -154,7 +197,7 @@ class PublicSiteRepository:
                 await self.session.scalars(
                     self._eligible_statement(portal, now)
                     .where(
-                        ContentItem.primary_language == language,
+                        self.representation_available(portal, language),
                         ContentItem.site_published_at >= published_from,
                         ContentItem.site_published_at < published_before,
                     )
@@ -163,17 +206,19 @@ class PublicSiteRepository:
                 )
             ).all()
         )
-        return await self._hydrate(items)
+        return await self._hydrate(items, portal, language)
 
     async def get_story(
-        self, portal: Portal, slug: str, now: datetime
+        self, portal: Portal, slug: str, now: datetime, language: str
     ) -> PublicContentRecord | None:
         content = await self.session.scalar(
-            self._eligible_statement(portal, now).where(ContentItem.slug == slug)
+            self._eligible_statement(portal, now).where(
+                ContentItem.slug == slug, self.representation_available(portal, language)
+            )
         )
         if content is None:
             return None
-        return (await self._hydrate([content]))[0]
+        return (await self._hydrate([content], portal, language))[0]
 
     async def category_section_content(
         self,
@@ -181,6 +226,7 @@ class PublicSiteRepository:
         categories: list[Category],
         now: datetime,
         per_category: int,
+        language: str,
     ) -> dict[UUID, list[PublicContentRecord]]:
         if not categories:
             return {}
@@ -201,6 +247,7 @@ class PublicSiteRepository:
                 ContentCategory.category_id.in_(category_ids),
                 *public_content_predicates(now),
                 self._portal_scope(portal),
+                self.representation_available(portal, language),
             )
             .subquery()
         )
@@ -221,7 +268,9 @@ class PublicSiteRepository:
                 )
             ).all()
         )
-        records = {record.content.id: record for record in await self._hydrate(contents)}
+        records = {
+            record.content.id: record for record in await self._hydrate(contents, portal, language)
+        }
         result: dict[UUID, list[PublicContentRecord]] = {
             category_id: [] for category_id in category_ids
         }
@@ -229,11 +278,37 @@ class PublicSiteRepository:
             result[row.category_id].append(records[row.content_id])
         return result
 
-    async def _hydrate(self, contents: list[ContentItem]) -> list[PublicContentRecord]:
+    async def _hydrate(
+        self, contents: list[ContentItem], portal: Portal, language: str
+    ) -> list[PublicContentRecord]:
         if not contents:
             return []
         content_ids = [content.id for content in contents]
-        records = {content.id: PublicContentRecord(content=content) for content in contents}
+        records = {
+            content.id: PublicContentRecord(content=content, language=language)
+            for content in contents
+        }
+
+        translations = list(
+            (
+                await self.session.scalars(
+                    select(Translation).where(
+                        Translation.content_item_id.in_(content_ids),
+                        Translation.portal_id == portal.id,
+                        Translation.language.in_(portal.supported_languages),
+                        Translation.status.in_(PUBLIC_TRANSLATION_STATUSES),
+                    )
+                )
+            ).all()
+        )
+        for translation in translations:
+            record = records[translation.content_item_id]
+            record.available_languages.add(translation.language)
+            if translation.language == language:
+                record.translation = translation
+        for record in records.values():
+            if record.content.primary_language in portal.supported_languages:
+                record.available_languages.add(record.content.primary_language)
 
         source_ids = [content.source_id for content in contents if content.source_id is not None]
         if source_ids:
@@ -297,5 +372,7 @@ class PublicSiteRepository:
             records[media.content_item_id].media.append(media)
         return [records[content.id] for content in contents]
 
-    async def hydrate(self, contents: list[ContentItem]) -> list[PublicContentRecord]:
-        return await self._hydrate(contents)
+    async def hydrate(
+        self, contents: list[ContentItem], portal: Portal, language: str
+    ) -> list[PublicContentRecord]:
+        return await self._hydrate(contents, portal, language)

@@ -14,7 +14,7 @@ export async function generateMetadata({
   return {
     title: "Trending",
     description: "Entertainment stories trending across Texas right now.",
-    alternates: { canonical: data.canonical_url },
+    alternates: { canonical: data.canonical_url, languages: data.alternates },
   };
 }
 

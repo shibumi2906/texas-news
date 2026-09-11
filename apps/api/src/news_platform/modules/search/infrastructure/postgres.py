@@ -15,6 +15,10 @@ from news_platform.modules.feeds.infrastructure.repository import (
     FeedRepository,
 )
 from news_platform.modules.geography.domain.models import GeographyNode
+from news_platform.modules.localization.domain.models import (
+    PUBLIC_TRANSLATION_STATUSES,
+    Translation,
+)
 from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.public_site.application.service import PublicNotFoundError
 from news_platform.modules.public_site.infrastructure.repository import PublicSiteRepository
@@ -45,18 +49,28 @@ class PostgresSearchBackend:
     ) -> tuple[list[SearchRecord], bool]:
         config = {"en": "english", "es": "spanish"}.get(query.language.split("-")[0], "simple")
         terms = func.plainto_tsquery(config, query.q)
+        active_vector = func.coalesce(Translation.search_vector, ContentItem.search_vector)
         score = (
-            func.round(cast(func.ts_rank_cd(ContentItem.search_vector, terms), Numeric), 6)
+            func.round(cast(func.ts_rank_cd(active_vector, terms), Numeric), 6)
             if query.q
             else cast(literal(0), Numeric)
         ).label("search_score")
         statement = (
             self.public.eligible_statement(portal, snapshot_at)
-            .where(ContentItem.primary_language == query.language)
+            .outerjoin(
+                Translation,
+                and_(
+                    Translation.content_item_id == ContentItem.id,
+                    Translation.portal_id == portal.id,
+                    Translation.language == query.language,
+                    Translation.status.in_(PUBLIC_TRANSLATION_STATUSES),
+                ),
+            )
+            .where(self.public.representation_available(portal, query.language))
             .with_only_columns(ContentItem, score)
         )
         if query.q:
-            statement = statement.where(ContentItem.search_vector.bool_op("@@")(terms))
+            statement = statement.where(active_vector.bool_op("@@")(terms))
         if query.entity:
             # Entity is a separate AND condition, supporting exact slug or words
             # in canonical names / aliases. It never exposes an entity directory.
@@ -138,7 +152,9 @@ class PostgresSearchBackend:
                 ).limit(query.limit + 1)
             )
         ).all()
-        records = await self.public.hydrate([row[0] for row in rows[: query.limit]])
+        records = await self.public.hydrate(
+            [row[0] for row in rows[: query.limit]], portal, query.language
+        )
         return [
             SearchRecord(record, Decimal(str(row[1])))
             for record, row in zip(records, rows[: query.limit], strict=True)

@@ -47,6 +47,7 @@ class PublicPortal(BaseModel):
     domain: str
     timezone: str
     default_language: str
+    supported_languages: list[str]
     canonical_url: str
     branding: dict[str, Any]
     categories: list[PublicCategory]
@@ -57,6 +58,8 @@ class PublicStorySummary(BaseModel):
     slug: str
     url: str
     canonical_url: str
+    language: str
+    alternates: dict[str, str]
     content_type: ContentType
     title: str
     subtitle: str | None
@@ -77,6 +80,9 @@ class PublicCategorySection(BaseModel):
 
 class PublicHomepage(BaseModel):
     portal: PublicPortal
+    language: str
+    canonical_url: str
+    alternates: dict[str, str]
     hero: PublicStorySummary | None
     trending: list[PublicStorySummary]
     category_sections: list[PublicCategorySection]
@@ -85,8 +91,10 @@ class PublicHomepage(BaseModel):
 
 class PublicCategoryPage(BaseModel):
     portal: PublicPortal
+    language: str
     category: PublicCategory
     canonical_url: str
+    alternates: dict[str, str]
     items: list[PublicStorySummary]
     total: int
     offset: int

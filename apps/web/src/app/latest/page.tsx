@@ -14,7 +14,7 @@ export async function generateMetadata({
   return {
     title: "Latest",
     description: "The latest entertainment stories published across Texas.",
-    alternates: { canonical: data.canonical_url },
+    alternates: { canonical: data.canonical_url, languages: data.alternates },
   };
 }
 

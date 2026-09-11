@@ -11,11 +11,11 @@ export async function generateMetadata(): Promise<Metadata> {
     title: "Texas Entertainment Daily",
     description:
       "Entertainment, culture, sports, food and local stories from across Texas.",
-    alternates: { canonical: data.portal.canonical_url },
+    alternates: { canonical: data.canonical_url, languages: data.alternates },
     openGraph: {
       title: "Texas Entertainment Daily",
       description: "The entertainment beat across the Lone Star State.",
-      url: data.portal.canonical_url,
+      url: data.canonical_url,
       type: "website",
     },
   };

@@ -21,9 +21,11 @@ function cookie(name: string) {
 export function PersonalizedFeed({
   kind,
   cursor,
+  language = "en",
 }: {
   kind: "for-you" | "following";
   cursor?: string;
+  language?: string;
 }) {
   const [data, setData] = useState<FeedPageData | null>(null);
   const [interests, setInterests] = useState<Interest[]>([]);
@@ -35,7 +37,7 @@ export function PersonalizedFeed({
 
   useEffect(() => {
     const controller = new AbortController();
-    const query = new URLSearchParams({ language: "en", limit: "12" });
+    const query = new URLSearchParams({ language, limit: "12" });
     if (cursor) query.set("cursor", cursor);
     fetch(`/api/v1/portals/texas/feeds/${kind}?${query}`, {
       credentials: "same-origin",
@@ -77,7 +79,7 @@ export function PersonalizedFeed({
           setStatus("error");
       });
     return () => controller.abort();
-  }, [cursor, kind, revision]);
+  }, [cursor, kind, language, revision]);
 
   async function toggleCategory(targetId: string, active: boolean) {
     const retained = interests.filter(
@@ -132,7 +134,11 @@ export function PersonalizedFeed({
 
   return (
     <>
-      <SiteHeader portal={data.portal} />
+      <SiteHeader
+        portal={data.portal}
+        language={data.language}
+        alternates={data.alternates}
+      />
       <main className="page-width listing-page personalized-page">
         <div className="page-kicker">Personalized Texas</div>
         <h1>{data.label}</h1>
@@ -183,7 +189,7 @@ export function PersonalizedFeed({
           <nav className="pagination" aria-label={`${data.label} feed pages`}>
             <span />
             <Link
-              href={`/${kind}?cursor=${encodeURIComponent(data.next_cursor)}`}
+              href={`${language === data.portal.default_language ? "" : `/${language}`}/${kind}?cursor=${encodeURIComponent(data.next_cursor)}`}
             >
               Older →
             </Link>

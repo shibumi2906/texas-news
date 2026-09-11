@@ -106,6 +106,21 @@ img {
   border-top: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.language-switch {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 0.35rem max(1rem, calc((100vw - 1180px) / 2));
+  background: #f4efe5;
+  font-size: 0.82rem;
+}
+
+.language-switch a[aria-current="page"] {
+  color: #6f1d1b;
+  font-weight: 800;
+  text-decoration: underline;
+}
+
 .nav-scroll {
   display: flex;
   gap: 28px;
