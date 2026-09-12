@@ -87,6 +87,18 @@ async def trending(
     )
 
 
+@router.get("/shorts", response_model=PublicFeedPage)
+async def shorts(
+    request: Request,
+    portal_slug: str,
+    language: str = Query(min_length=2, max_length=35),
+    limit: int = Query(ge=1, le=50),
+    cursor: str | None = Query(default=None, max_length=1000),
+    session: AsyncSession = DatabaseSession,
+) -> PublicFeedPage:
+    return await feed_page(request, session, portal_slug, FeedKind.SHORTS, language, limit, cursor)
+
+
 @router.get("/categories/{category_slug}", response_model=PublicFeedPage)
 async def category(
     request: Request,

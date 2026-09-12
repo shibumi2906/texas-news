@@ -58,6 +58,7 @@ describe("Home", () => {
         { category: { name: "Music", slug: "music" }, items: [summary] },
       ],
       video_highlights: [],
+      media_highlights: [],
     };
     render(<HomeView data={data} />);
 
@@ -97,6 +98,7 @@ describe("Home", () => {
           trending: [],
           category_sections: [],
           video_highlights: [],
+          media_highlights: [],
         }}
       />,
     );

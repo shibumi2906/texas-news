@@ -51,6 +51,21 @@ class PublicSiteService:
             limit=4,
             language=language,
         )
+        extended_types = {
+            ContentType.GALLERY,
+            ContentType.MEME,
+            ContentType.EVENT,
+            ContentType.LIVE,
+        }
+        if portal.feature_flags.get("shorts", False):
+            extended_types.add(ContentType.SHORT)
+        media_highlights, _ = await self.repository.list_content(
+            portal,
+            self.now,
+            content_types=extended_types,
+            limit=6,
+            language=language,
+        )
         return PublicHomepage(
             portal=self._portal_view(portal, categories),
             language=language,
@@ -66,6 +81,7 @@ class PublicSiteService:
                 for category in categories
             ],
             video_highlights=[self._summary(portal, record) for record in videos],
+            media_highlights=[self._summary(portal, record) for record in media_highlights],
         )
 
     async def category(
@@ -115,8 +131,34 @@ class PublicSiteService:
         record = await self.repository.get_story(portal, story_slug, self.now, language)
         if record is None:
             raise PublicNotFoundError("story not found")
+        if record.content.content_type is ContentType.SHORT and not portal.feature_flags.get(
+            "shorts", False
+        ):
+            raise PublicNotFoundError("shorts are disabled for portal")
         related: list[PublicContentRecord] = []
-        if record.categories:
+        if record.content.content_type is ContentType.SHORT:
+            related, _ = await self.repository.list_content(
+                portal,
+                self.now,
+                category_id=record.categories[0].id if record.categories else None,
+                content_types={ContentType.SHORT},
+                exclude_id=record.content.id,
+                limit=6,
+                language=language,
+            )
+            if len(related) < 3:
+                fallback, _ = await self.repository.list_content(
+                    portal,
+                    self.now,
+                    content_types={ContentType.SHORT},
+                    exclude_id=record.content.id,
+                    limit=6,
+                    language=language,
+                )
+                existing = {item.content.id for item in related}
+                related.extend(item for item in fallback if item.content.id not in existing)
+                related = related[:6]
+        elif record.categories:
             related, _ = await self.repository.list_content(
                 portal,
                 self.now,
@@ -220,6 +262,7 @@ class PublicSiteService:
             ],
             media=[
                 PublicMedia(
+                    id=media.id,
                     type=media.type.value,
                     url=media.storage_url or media.source_url or "",
                     thumbnail_url=(
@@ -227,9 +270,17 @@ class PublicSiteService:
                         if media.metadata_.get("thumbnail_url")
                         else None
                     ),
+                    mime_type=media.mime_type,
                     width=media.width,
                     height=media.height,
+                    duration=float(media.duration) if media.duration is not None else None,
+                    position=media.position,
                     attribution=media.attribution,
+                    provider=(
+                        str(media.metadata_.get("provider"))
+                        if media.metadata_.get("provider")
+                        else None
+                    ),
                 )
                 for media in record.media
             ],

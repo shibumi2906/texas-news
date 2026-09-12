@@ -6,6 +6,7 @@ import {
   CategoryView,
   FeedView,
   HomeView,
+  ShortsView,
   StoryView,
 } from "@/components/public-site";
 import { SearchView } from "@/components/search-view";
@@ -15,6 +16,7 @@ import {
   getLatest,
   getLocal,
   getSearch,
+  getShorts,
   getStory,
   getTrending,
   PublicApiError,
@@ -38,11 +40,15 @@ type Route = {
     | "story"
     | "search"
     | "for-you"
-    | "following";
+    | "following"
+    | "shorts";
   value?: string;
 };
 
 async function resolveRoute(segments: string[]): Promise<Route> {
+  if (segments.length === 1 && segments[0] === "shorts") {
+    return { language: "en", kind: "shorts" };
+  }
   if (segments.length === 1) {
     try {
       await getHomepage(segments[0]);
@@ -55,7 +61,9 @@ async function resolveRoute(segments: string[]): Promise<Route> {
   }
   const [language, kind, value] = segments;
   if (
-    ["latest", "trending", "search", "for-you", "following"].includes(kind) &&
+    ["latest", "trending", "search", "for-you", "following", "shorts"].includes(
+      kind,
+    ) &&
     segments.length === 2
   ) {
     return { language, kind: kind as Route["kind"] };
@@ -106,6 +114,9 @@ async function load(props: Props) {
     if (route.kind === "trending") {
       return { route, data: await getTrending(cursor(raw), route.language) };
     }
+    if (route.kind === "shorts") {
+      return { route, data: await getShorts(cursor(raw), route.language) };
+    }
     if (route.kind === "local") {
       return {
         route,
@@ -140,6 +151,7 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
       data.description ??
       data.subtitle ??
       data.title;
+    const image = data.media[0]?.thumbnail_url ?? data.media[0]?.url;
     return {
       title: typeof data.seo.title === "string" ? data.seo.title : data.title,
       description,
@@ -149,6 +161,9 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
         description,
         type: "article",
         url: data.canonical_url,
+        publishedTime: data.published_at,
+        modifiedTime: data.updated_at,
+        images: image ? [{ url: image }] : undefined,
       },
     };
   }
@@ -178,6 +193,9 @@ export default async function LocalizedPage(props: Props) {
   }
   if (route.kind === "trending" && data && "feed" in data) {
     return <FeedView data={data} path={`${base}/trending`} />;
+  }
+  if (route.kind === "shorts" && data && "feed" in data) {
+    return <ShortsView data={data} />;
   }
   if (route.kind === "local" && data && "feed" in data) {
     return <FeedView data={data} path={`${base}/local/${route.value}`} />;

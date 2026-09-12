@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from news_platform.modules.content.domain.models import ContentType
 
@@ -33,12 +33,17 @@ class PublicSource(BaseModel):
 
 
 class PublicMedia(BaseModel):
+    id: UUID
     type: str
     url: str
     thumbnail_url: str | None
+    mime_type: str | None
     width: int | None
     height: int | None
+    duration: float | None
+    position: int
     attribution: str | None
+    provider: str | None
 
 
 class PublicPortal(BaseModel):
@@ -87,6 +92,7 @@ class PublicHomepage(BaseModel):
     trending: list[PublicStorySummary]
     category_sections: list[PublicCategorySection]
     video_highlights: list[PublicStorySummary]
+    media_highlights: list[PublicStorySummary] = Field(default_factory=list)
 
 
 class PublicCategoryPage(BaseModel):

@@ -363,6 +363,7 @@ class PublicSiteRepository:
                 )
                 .order_by(
                     MediaAsset.content_item_id,
+                    MediaAsset.position,
                     case((MediaAsset.type == MediaType.IMAGE, 0), else_=1),
                     MediaAsset.id,
                 )

@@ -29,6 +29,8 @@ Schema `1.1` adds the following optional or defaulted fields without removing `1
 - `topics` and `categories`
 - `geographies`
 - typed `media`
+- `content.content_type`: `article`, `image`, `gallery`, `meme`, `video`, `short`, `live`, or
+  `event`
 - `ai_provenance`
 - richer source provenance
 
@@ -48,7 +50,11 @@ The Site stores every accepted version in `IncomingPackageVersion`. `IncomingPac
 
 ### 2.2 Content and languages
 
-`content` is the canonical language variant and contains title, canonical URL, language, and optional excerpt/body. `language_versions` contains additional variants with their language and translation provenance.
+`content` is the canonical language variant and contains title, canonical URL, language, optional
+excerpt/body, and the optional `content_type`. For a new `1.1` item, omitting `content_type` defaults
+to `article`; on a later update, omission preserves the canonical type already stored by the Site.
+Schema `1.0` remains strict and rejects this field. `language_versions` contains additional variants
+with their language and translation provenance.
 
 ### 2.3 Source provenance
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AiStorySummary } from "@/components/ai-story-summary";
 import { AiAssistant } from "@/components/ai-assistant";
 import { CommunityPanel } from "@/components/community";
+import { GalleryExperience, ShortsFeed } from "@/components/media-experience";
 
 import type {
   FeedPageData,
@@ -42,6 +43,8 @@ const copy = {
     viewAll: "View all",
     share: "Share",
     related: "Related stories",
+    shorts: "Shorts",
+    media: "More ways to experience Texas",
   },
   es: {
     home: "Inicio",
@@ -54,6 +57,8 @@ const copy = {
     viewAll: "Ver todo",
     share: "Compartir",
     related: "Historias relacionadas",
+    shorts: "Videos cortos",
+    media: "Más formas de vivir Texas",
   },
 } as const;
 
@@ -153,6 +158,7 @@ export function SiteHeader({
           <Link href={`${base}/latest`}>{labels.latest}</Link>
           <Link href={`${base}/search`}>{labels.search}</Link>
           <Link href={`${base}/trending`}>{labels.trending}</Link>
+          <Link href={`${base}/shorts`}>{labels.shorts}</Link>
           <Link href={`${base}/for-you`}>{labels.forYou}</Link>
           <Link href={`${base}/following`}>{labels.following}</Link>
           <Link href={`${base}/local/texas`}>{labels.local}</Link>
@@ -180,6 +186,7 @@ export function StoryCard({
         <MediaFrame story={story} />
       </Link>
       <div className="card-copy">
+        <span className="content-type-label">{story.content_type}</span>
         <CategoryBadge story={story} />
         <h3>
           <Link href={story.url}>{story.title}</Link>
@@ -312,6 +319,25 @@ export function HomeView({ data }: { data: Homepage }) {
                 </p>
               )}
             </section>
+
+            <section className="editorial-section media-section">
+              <SectionHeading
+                title={ui(data.language).media}
+                language={data.language}
+              />
+              {data.media_highlights.length ? (
+                <div className="card-grid">
+                  {data.media_highlights.map((story) => (
+                    <StoryCard story={story} key={story.id} />
+                  ))}
+                </div>
+              ) : (
+                <p className="quiet-copy">
+                  Galleries, memes, Shorts, events and live coverage will appear
+                  here when published.
+                </p>
+              )}
+            </section>
           </>
         )}
       </main>
@@ -373,6 +399,32 @@ export function CategoryView({ data }: { data: FeedPageData }) {
   return <FeedView data={data} path={`/${data.scope ?? ""}`} />;
 }
 
+export function ShortsView({ data }: { data: FeedPageData }) {
+  const languagePrefix =
+    data.language === data.portal.default_language ? "" : `/${data.language}`;
+  const nextHref = data.next_cursor
+    ? `${languagePrefix}/shorts?${new URLSearchParams({ cursor: data.next_cursor })}`
+    : undefined;
+  return (
+    <>
+      <SiteHeader
+        portal={data.portal}
+        language={data.language}
+        alternates={data.alternates}
+      />
+      <main className="shorts-page">
+        <h1 className="visually-hidden">{data.label}</h1>
+        <ShortsFeed
+          items={data.items}
+          portalSlug={data.portal.slug}
+          nextHref={nextHref}
+        />
+      </main>
+      <SiteFooter portal={data.portal} />
+    </>
+  );
+}
+
 function ShareControls({ story }: { story: Story }) {
   const encodedUrl = encodeURIComponent(story.canonical_url);
   const encodedTitle = encodeURIComponent(story.title);
@@ -394,6 +446,31 @@ function ShareControls({ story }: { story: Story }) {
 
 export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
   const paragraphs = story.body?.split(/\n\s*\n/).filter(Boolean) ?? [];
+  if (story.content_type === "short") {
+    const relatedShorts = story.related.filter(
+      (item) => item.content_type === "short",
+    );
+    return (
+      <>
+        <SiteHeader
+          portal={portal}
+          language={story.language}
+          alternates={story.alternates}
+        />
+        <main className="shorts-page">
+          <h1 className="visually-hidden">{story.title}</h1>
+          <ShortsFeed
+            items={[story, ...relatedShorts]}
+            portalSlug={portal.slug}
+          />
+        </main>
+        <SiteFooter portal={portal} />
+      </>
+    );
+  }
+  const primaryVideo = story.media.find((item) => item.type === "video");
+  const primaryImage = story.media.find((item) => item.type === "image");
+  const venue = story.entities.find((item) => item.type === "venue");
   return (
     <>
       <SiteHeader
@@ -432,15 +509,91 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
               ) : null}
             </div>
           </header>
-          <div className="story-primary-media">
-            <MediaFrame story={story} priority />
-            {primaryMedia(story)?.attribution ? (
-              <small>{primaryMedia(story)?.attribution}</small>
-            ) : null}
-          </div>
+          {story.content_type === "gallery" ? (
+            <GalleryExperience key={story.id} story={story} />
+          ) : story.content_type === "live" && primaryVideo ? (
+            <section
+              className="live-experience"
+              aria-label={
+                story.language === "es" ? "Cobertura en vivo" : "Live coverage"
+              }
+            >
+              <span className="live-indicator">
+                {story.language === "es"
+                  ? "Cobertura en vivo"
+                  : "Live coverage"}
+              </span>
+              <video
+                src={primaryVideo.url}
+                poster={primaryVideo.thumbnail_url ?? undefined}
+                controls
+                autoPlay
+                muted
+                playsInline
+              >
+                Your browser does not support video playback.
+              </video>
+            </section>
+          ) : story.content_type === "meme" && primaryImage ? (
+            <figure className="meme-experience">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={primaryImage.url} alt={story.title} />
+              {primaryImage.attribution ? (
+                <figcaption>{primaryImage.attribution}</figcaption>
+              ) : null}
+            </figure>
+          ) : (
+            <div className="story-primary-media">
+              <MediaFrame story={story} priority />
+              {primaryMedia(story)?.attribution ? (
+                <small>{primaryMedia(story)?.attribution}</small>
+              ) : null}
+            </div>
+          )}
+          {story.content_type === "event" ? (
+            <aside
+              className="event-facts"
+              aria-label={
+                story.language === "es"
+                  ? "Detalles del evento"
+                  : "Event details"
+              }
+            >
+              <strong>
+                {story.language === "es"
+                  ? "Detalles del evento"
+                  : "Event details"}
+              </strong>
+              {venue ? (
+                <span>
+                  {story.language === "es" ? "Lugar" : "Venue"}: {venue.name}
+                </span>
+              ) : null}
+              {story.geography.map((place) => (
+                <span key={place.slug}>
+                  {story.language === "es" ? "Ubicación" : "Location"}:{" "}
+                  {place.name}
+                </span>
+              ))}
+              {!venue && !story.geography.length ? (
+                <span>
+                  {story.language === "es"
+                    ? "La redacción añadirá los detalles."
+                    : "Details will be added by the newsroom."}
+                </span>
+              ) : null}
+            </aside>
+          ) : null}
           <ShareControls story={story} />
-          <AiStorySummary storySlug={story.slug} language={story.language} />
-          <AiAssistant storySlug={story.slug} language={story.language} />
+          {story.content_type === "article" ? (
+            <>
+              <AiStorySummary
+                storySlug={story.slug}
+                language={story.language}
+              />
+              <AiAssistant storySlug={story.slug} language={story.language} />
+            </>
+          ) : null}
           <div className="story-body">
             {paragraphs.length ? (
               paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)
@@ -464,7 +617,12 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
               <span key={entity.slug}>{entity.name}</span>
             ))}
           </footer>
-          <CommunityPanel storySlug={story.slug} entities={story.entities} />
+          <CommunityPanel
+            portalSlug={portal.slug}
+            language={story.language}
+            storySlug={story.slug}
+            entities={story.entities}
+          />
         </article>
         {story.related.length ? (
           <aside className="related-stories">

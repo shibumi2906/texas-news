@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 9 adds portal-scoped For You and Following feeds, explicit user interests, and deterministic behavioral affinity scoring. It preserves the Phase 0–8 ingestion, editorial, public visibility, feeds, search, analytics, authentication, community, and Redis consistency boundaries. Notifications and Site AI remain deferred.
+Phase 13 adds canonical gallery, meme, Short, event, and live experiences to the Texas portal. It preserves the Phase 0–12 ingestion, publication, visibility, multilingual, ranking, analytics, recommendation, and community boundaries. Advanced admin, advertising, and notifications remain deferred.
 
 ## Prerequisites
 
@@ -393,6 +393,40 @@ support the supplied language; no new wire fields or translation-generation pipe
 
 Migration `0013_phase_12_multilingual` creates the translation table and GIN index, enables EN/ES
 and the multilingual feature flag for the Texas seed portal, and preserves all Phase 0–11 data.
+
+## Phase 13 extended media UX
+
+The existing `ContentItem.content_type` enum remains the authority for `gallery`, `meme`, `short`,
+`event`, and `live`; no parallel publication or ranking identity was added. Public story URLs remain
+`/story/{slug}` in English and `/es/story/{slug}` in Spanish. The dedicated Shorts feeds are:
+
+```text
+GET /api/v1/portals/{portal_slug}/feeds/shorts?language=en&limit=12
+GET /api/v1/portals/{portal_slug}/feeds/shorts?language=es&limit=12
+```
+
+The browser routes are `/shorts` and `/es/shorts`. They use the existing feed cache, cursor,
+language-representation checks, portal geography scope, and centralized public eligibility policy.
+Each response contains each canonical `ContentItem.id` at most once.
+
+Shorts use a vertical scroll-snap viewer with muted standards-compliant autoplay, one active player,
+native controls, fullscreen, related navigation, and the existing reactions, comments, sharing, and
+save endpoints. Playback emits the existing `video_start`, `watch_time`, and `completion` events with
+the canonical content ID. Browser autoplay rejection leaves native play controls available.
+
+Gallery order now persists in `MediaAsset.position`; ingestion assigns it from the existing ordered
+`media` array. Migration `0014_phase_13_extended_media` backfills existing assets to position zero,
+and adds the nonnegative constraint/index. The idempotent development seed enables the existing
+Texas `shorts` feature flag without making the schema migration overwrite mutable tenant settings.
+The Site accepts one additive schema `1.1` field, `content.content_type`, and maps it to the
+canonical enum; omitted values remain backward-compatible and schema `1.0` rejects the new field. Attribution
+is shown as the available gallery image metadata; no unsupported caption or event schedule fields
+are invented. Event UX uses canonical geography and venue entities when present, while live UX uses
+the existing video/source URL and does not add a streaming backend.
+
+The idempotent Texas development seed includes bilingual gallery, meme, three Shorts, event, and live
+fixtures so the extended media routes can be smoke-tested locally. Phase 13 adds no environment
+variables.
 
 ## One-command checks
 

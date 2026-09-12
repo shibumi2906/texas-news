@@ -22,6 +22,7 @@ from news_platform.modules.content.infrastructure.repository import ContentRepos
 from news_platform.modules.geography.domain.models import GeographyNode, GeographyType
 from news_platform.modules.geography.infrastructure.repository import GeographyRepository
 from news_platform.modules.localization.domain.models import Translation, TranslationStatus
+from news_platform.modules.media.domain.models import MediaAsset, MediaStatus, MediaType
 from news_platform.modules.portals.domain.models import Portal, PortalStatus
 from news_platform.modules.portals.infrastructure.repository import PortalRepository
 from news_platform.modules.taxonomy.domain.models import Category, TaxonomyStatus
@@ -122,7 +123,7 @@ async def seed_texas(session: AsyncSession) -> SeedResult:
             "ai_search": True,
             "recommendations": True,
             "personalization": True,
-            "shorts": False,
+            "shorts": True,
             "advertising": False,
             "notifications": False,
             "multilingual": True,
@@ -148,7 +149,7 @@ async def seed_texas(session: AsyncSession) -> SeedResult:
         )
     else:
         portal.supported_languages = list(dict.fromkeys([*portal.supported_languages, "en", "es"]))
-        portal.feature_flags = {**portal.feature_flags, "multilingual": True}
+        portal.feature_flags = {**portal.feature_flags, "multilingual": True, "shorts": True}
 
     # Keep one small, idempotent bilingual story in the development seed so every
     # Phase 12 public surface can be exercised without simulating the Integrator.
@@ -229,6 +230,201 @@ async def seed_texas(session: AsyncSession) -> SeedResult:
                 source_updated_at=sample_story.updated_at,
             )
         )
+
+    phase13_samples = (
+        (
+            "texas-night-lights-gallery",
+            ContentType.GALLERY,
+            "Texas after dark: a visual tour",
+            "Texas de noche: un recorrido visual",
+            "local",
+            (
+                (
+                    MediaType.IMAGE,
+                    "https://images.unsplash.com/photo-1531218150217-54595bc2b934?auto=format&fit=crop&w=1600&q=80",
+                    "Austin skyline at dusk",
+                ),
+                (
+                    MediaType.IMAGE,
+                    "https://images.unsplash.com/photo-1530089711124-9ca31fb9e863?auto=format&fit=crop&w=1600&q=80",
+                    "Downtown lights across Texas",
+                ),
+                (
+                    MediaType.IMAGE,
+                    "https://images.unsplash.com/photo-1545194445-dddb8f4487c6?auto=format&fit=crop&w=1600&q=80",
+                    "A Texas evening crowd",
+                ),
+            ),
+        ),
+        (
+            "texas-weekend-meme",
+            ContentType.MEME,
+            "When the Texas weekend finally arrives",
+            "Cuando por fin llega el fin de semana en Texas",
+            "viral",
+            (
+                (
+                    MediaType.IMAGE,
+                    "https://images.unsplash.com/photo-1517849845537-4d257902454a?auto=format&fit=crop&w=1200&q=80",
+                    "Photo illustration for the Texas weekend meme",
+                ),
+            ),
+        ),
+        (
+            "austin-stage-short",
+            ContentType.SHORT,
+            "60 seconds from an Austin stage",
+            "60 segundos desde un escenario de Austin",
+            "music",
+            (
+                (
+                    MediaType.VIDEO,
+                    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+                    "CC0 sample video",
+                ),
+            ),
+        ),
+        (
+            "texas-road-short",
+            ContentType.SHORT,
+            "A quick Texas road moment",
+            "Un momento rápido en una carretera de Texas",
+            "travel",
+            (
+                (
+                    MediaType.VIDEO,
+                    "https://media.w3.org/2010/05/sintel/trailer.mp4",
+                    "Open movie sample trailer",
+                ),
+            ),
+        ),
+        (
+            "san-antonio-dance-short",
+            ContentType.SHORT,
+            "A San Antonio dance floor in 30 seconds",
+            "Una pista de baile de San Antonio en 30 segundos",
+            "music",
+            (
+                (
+                    MediaType.VIDEO,
+                    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+                    "CC0 sample video",
+                ),
+            ),
+        ),
+        (
+            "downtown-arts-night-event",
+            ContentType.EVENT,
+            "Downtown arts night brings Texas creators together",
+            "La noche de arte reúne a creadores de Texas",
+            "events",
+            (
+                (
+                    MediaType.IMAGE,
+                    "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=1600&q=80",
+                    "Festival crowd",
+                ),
+            ),
+        ),
+        (
+            "texas-live-stage",
+            ContentType.LIVE,
+            "Live coverage from the Texas music stage",
+            "Cobertura en vivo desde el escenario musical de Texas",
+            "music",
+            (
+                (
+                    MediaType.VIDEO,
+                    "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4",
+                    "Live-stage development stream",
+                ),
+            ),
+        ),
+    )
+    for sample_index, (
+        slug,
+        content_type,
+        title,
+        spanish_title,
+        category_slug,
+        media,
+    ) in enumerate(phase13_samples, start=1):
+        seed_external_id = f"seed:texas:{slug}"
+        item = await session.scalar(select(ContentItem).where(ContentItem.slug == slug))
+        if item is not None and item.external_id != seed_external_id:
+            # A production-like database may already own this slug. Seed data
+            # must never attach taxonomy, geography, or translations to it.
+            continue
+        if item is None:
+            published_at = datetime(2026, 6, 2, 15 + sample_index, 0, tzinfo=UTC)
+            item = ContentItem(
+                external_id=seed_external_id,
+                slug=slug,
+                content_type=content_type,
+                status=ContentStatus.PUBLISHED,
+                upstream_status=ContentStatus.PUBLISHED,
+                source_id=sample_source.id,
+                original_url=f"https://example.com/texas-demo/{slug}",
+                original_language="en",
+                primary_language="en",
+                title=title,
+                subtitle="A Phase 13 development story",
+                description=f"{title}. Explore the full experience from the Texas newsroom.",
+                body=f"{title}. This development fixture exercises the canonical media experience.",
+                publication_time=published_at,
+                original_publication_time=published_at,
+                site_published_at=published_at,
+                author="Texas Demo Desk",
+                metadata_={"seed": True, "phase": 13},
+                seo={},
+            )
+            session.add(item)
+            await session.flush()
+            for position, (media_type, url, attribution) in enumerate(media):
+                session.add(
+                    MediaAsset(
+                        content_item_id=item.id,
+                        position=position,
+                        type=media_type,
+                        source_url=url,
+                        mime_type=("video/mp4" if media_type is MediaType.VIDEO else "image/jpeg"),
+                        attribution=attribution,
+                        metadata_={},
+                        status=MediaStatus.READY,
+                    )
+                )
+        category = await taxonomy_repository.get_category_by_slug(category_slug)
+        assert category is not None
+        await content_repository.associate_category(item.id, category.id)
+        await content_repository.associate_geography(
+            item.id,
+            texas.id,
+            ContentGeographyRelationship.PRIMARY,
+            1.0,
+            "seed",
+        )
+        translation = await session.scalar(
+            select(Translation).where(
+                Translation.portal_id == portal.id,
+                Translation.content_item_id == item.id,
+                Translation.language == "es",
+            )
+        )
+        if translation is None:
+            session.add(
+                Translation(
+                    portal_id=portal.id,
+                    content_item_id=item.id,
+                    language="es",
+                    title=spanish_title,
+                    subtitle="Una historia de desarrollo de Phase 13",
+                    description=f"{spanish_title}. Una experiencia del equipo de Texas.",
+                    body=f"{spanish_title}. Esta muestra usa la identidad canónica del contenido.",
+                    translation_source="editorial-seed",
+                    status=TranslationStatus.EDITORIAL,
+                    source_updated_at=item.updated_at,
+                )
+            )
 
     await session.commit()
     return SeedResult(

@@ -2,7 +2,17 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import BigInteger, CheckConstraint, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,11 +50,14 @@ class MediaAsset(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         CheckConstraint("height IS NULL OR height >= 0", name="height_nonnegative"),
         CheckConstraint("duration IS NULL OR duration >= 0", name="duration_nonnegative"),
         CheckConstraint("size IS NULL OR size >= 0", name="size_nonnegative"),
+        CheckConstraint("position >= 0", name="position_nonnegative"),
+        Index("ix_media_assets_content_position", "content_item_id", "position", "id"),
     )
 
     content_item_id: Mapped[UUID] = mapped_column(
         ForeignKey("content_items.id", ondelete="CASCADE"), nullable=False, index=True
     )
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     type: Mapped[MediaType] = mapped_column(
         Enum(
             MediaType,

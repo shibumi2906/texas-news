@@ -13,6 +13,7 @@ class FeedKind(StrEnum):
     TRENDING = "trending"
     FOR_YOU = "for_you"
     FOLLOWING = "following"
+    SHORTS = "shorts"
 
 
 class PublicFeedPage(BaseModel):

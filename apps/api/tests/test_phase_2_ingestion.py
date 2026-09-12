@@ -13,6 +13,7 @@ import httpx
 import pytest
 import pytest_asyncio
 from fastapi import FastAPI
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
@@ -26,6 +27,7 @@ from news_platform.modules.content.domain.models import (
     ContentItem,
     ContentStatus,
     ContentTopic,
+    ContentType,
     ContentVersion,
     ContentVersionOrigin,
     Source,
@@ -44,6 +46,7 @@ from news_platform.modules.ingestion.domain.models import (
     IncomingPackageVersion,
     IntegratorConnection,
 )
+from news_platform.modules.ingestion.domain.schemas import CanonicalNewsPackageEnvelope
 from news_platform.modules.localization.domain.models import Translation, TranslationStatus
 from news_platform.modules.media.domain.models import MediaAsset
 from news_platform.modules.portals.domain.models import Portal, PortalStatus
@@ -525,6 +528,97 @@ async def test_schema_10_legacy_taxonomy_is_consumed_and_regions_preserved(
         assert content.metadata_["legacy_regions"] == ["Texas"]
         assert await session.scalar(select(func.count()).select_from(Topic)) == 1
         assert await session.scalar(select(func.count()).select_from(ContentTopic)) == 1
+
+
+async def test_schema_11_content_type_maps_to_canonical_content_and_10_rejects_it(
+    client: tuple[httpx.AsyncClient, async_sessionmaker[Any]],
+) -> None:
+    http, session_factory = client
+    created = package()
+    created["content"]["content_type"] = "short"
+    assert (await post_package(http, created)).status_code == 201
+
+    update_without_type = package(2, operation="updated")
+    assert (await post_package(http, update_without_type)).status_code == 201
+
+    async with session_factory() as session:
+        content = await session.scalar(select(ContentItem))
+        assert content is not None
+        assert content.content_type is ContentType.SHORT
+        versions = (
+            await session.scalars(select(ContentVersion).order_by(ContentVersion.version_number))
+        ).all()
+        assert [version.metadata_["content_type"] for version in versions] == ["short", "short"]
+
+    legacy = package(schema_version="1.0")
+    legacy["package_id"] = str(uuid4())
+    legacy["event_id"] = str(uuid4())
+    legacy["content"]["content_type"] = "short"
+    assert (await post_package(http, legacy)).status_code == 422
+
+    legacy_translation = package(schema_version="1.0")
+    legacy_translation["package_id"] = str(uuid4())
+    legacy_translation["event_id"] = str(uuid4())
+    legacy_translation["language_versions"]["es"]["content_type"] = "short"
+    assert (await post_package(http, legacy_translation)).status_code == 422
+
+
+async def test_schema_11_content_type_validation_uses_domain_enum() -> None:
+    for content_type in ContentType:
+        payload = package()
+        payload["content"]["content_type"] = content_type.value
+        envelope = CanonicalNewsPackageEnvelope.model_validate(payload)
+        assert envelope.content.content_type is content_type
+
+    missing = CanonicalNewsPackageEnvelope.model_validate(package())
+    assert missing.content.content_type is ContentType.ARTICLE
+
+    for invalid in ("SHORT", "story", "", None, 13):
+        payload = package()
+        payload["content"]["content_type"] = invalid
+        with pytest.raises(ValidationError):
+            CanonicalNewsPackageEnvelope.model_validate(payload)
+
+    unknown = package()
+    unknown["content"]["phase_13_unknown"] = True
+    with pytest.raises(ValidationError):
+        CanonicalNewsPackageEnvelope.model_validate(unknown)
+
+
+async def test_media_order_is_replaced_deterministically_on_reingestion(
+    client: tuple[httpx.AsyncClient, async_sessionmaker[Any]],
+) -> None:
+    http, session_factory = client
+    created = package()
+    created["content"]["content_type"] = "gallery"
+    template = created["media"][0]
+    created["media"] = []
+    for index in range(3):
+        asset = deepcopy(template)
+        asset["source_url"] = f"https://example.com/gallery-{index}.jpg"
+        asset["external_id"] = f"gallery-{index}"
+        created["media"].append(asset)
+    assert (await post_package(http, created)).status_code == 201
+
+    updated = package(2, operation="updated")
+    updated["content"]["content_type"] = "gallery"
+    updated["media"] = list(reversed(created["media"]))
+    assert (await post_package(http, updated)).status_code == 201
+
+    async with session_factory() as session:
+        assets = list(
+            (
+                await session.scalars(
+                    select(MediaAsset).order_by(MediaAsset.position, MediaAsset.id)
+                )
+            ).all()
+        )
+        assert [asset.position for asset in assets] == [0, 1, 2]
+        assert [asset.source_url for asset in assets] == [
+            "https://example.com/gallery-2.jpg",
+            "https://example.com/gallery-1.jpg",
+            "https://example.com/gallery-0.jpg",
+        ]
 
 
 async def test_conflicting_immutable_version_returns_409(

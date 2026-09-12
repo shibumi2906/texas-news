@@ -6,6 +6,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from news_platform.modules.content.domain.models import ContentType
+
 SUPPORTED_SCHEMA_VERSIONS = frozenset({"1.0", "1.1"})
 PackageOperation = Literal["created", "updated", "corrected", "retracted", "deleted"]
 
@@ -15,6 +17,7 @@ class ContractModel(BaseModel):
 
 
 class PackageContent(ContractModel):
+    content_type: ContentType = ContentType.ARTICLE
     title: str = Field(min_length=1)
     lead: str | None = None
     excerpt: str | None = None
@@ -139,6 +142,14 @@ class CanonicalNewsPackageEnvelope(ContractModel):
 
     @model_validator(mode="after")
     def validate_lifecycle_reason(self) -> CanonicalNewsPackageEnvelope:
+        translated_type_supplied = any(
+            "content_type" in variant.model_fields_set
+            for variant in self.language_versions.values()
+        )
+        if translated_type_supplied:
+            raise ValueError("content_type belongs only to canonical content")
+        if self.schema_version == "1.0" and "content_type" in self.content.model_fields_set:
+            raise ValueError("content_type is available only in schema 1.1")
         if self.operation in {"corrected", "retracted", "deleted"} and not self.revision_reason:
             raise ValueError(f"{self.operation} package requires revision_reason")
         return self

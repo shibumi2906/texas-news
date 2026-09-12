@@ -284,6 +284,16 @@ img {
   text-transform: uppercase;
 }
 
+.content-type-label {
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
 .hero-copy h1 {
   margin: 15px 0 12px;
   font-size: clamp(35px, 5vw, 64px);
@@ -431,6 +441,13 @@ img {
   background: linear-gradient(135deg, #0e1c2a, #101520);
 }
 
+.media-section {
+  padding: 0 18px 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(145deg, #101f2d, #251329);
+}
+
 .video-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -558,6 +575,330 @@ img {
   margin-top: 8px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.gallery-experience,
+.meme-experience,
+.live-experience {
+  margin: 30px 0 0;
+}
+
+.gallery-experience:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 4px;
+}
+
+.gallery-stage {
+  position: relative;
+  display: grid;
+  min-height: min(68vh, 720px);
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #02070b;
+}
+
+.gallery-stage > img {
+  width: 100%;
+  height: min(68vh, 720px);
+  object-fit: contain;
+}
+
+.gallery-stage button {
+  position: absolute;
+  top: 50%;
+  width: 46px;
+  height: 46px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(2, 7, 11, 0.76);
+  color: white;
+  cursor: pointer;
+  font-size: 22px;
+}
+
+.gallery-previous {
+  left: 18px;
+}
+
+.gallery-next {
+  right: 18px;
+}
+
+.gallery-caption {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.gallery-thumbnails {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.gallery-thumbnails button {
+  flex: 0 0 92px;
+  height: 64px;
+  overflow: hidden;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 5px;
+  background: #02070b;
+  cursor: pointer;
+}
+
+.gallery-thumbnails button[aria-current="true"] {
+  border-color: var(--accent);
+}
+
+.gallery-thumbnails img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.meme-experience {
+  display: grid;
+  place-items: center;
+  padding: clamp(16px, 4vw, 42px);
+  border-radius: 12px;
+  background: radial-gradient(circle at top, #21364a, #02070b 70%);
+}
+
+.meme-experience img {
+  max-height: 75vh;
+  border-radius: 8px;
+  object-fit: contain;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+}
+
+.meme-experience figcaption {
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.live-experience {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #000;
+}
+
+.live-experience video {
+  display: block;
+  width: 100%;
+  max-height: 75vh;
+}
+
+.live-indicator {
+  position: absolute;
+  z-index: 1;
+  top: 16px;
+  left: 16px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  background: #d8144b;
+  color: white;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.event-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  max-width: 720px;
+  margin: 22px auto;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 7px;
+  background: var(--surface);
+}
+
+.event-facts strong {
+  flex-basis: 100%;
+}
+
+.event-facts span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.shorts-page {
+  background: #02070b;
+}
+
+.shorts-feed {
+  height: calc(100svh - 146px);
+  min-height: 560px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: thin;
+}
+
+.short-card {
+  position: relative;
+  width: min(100%, 680px);
+  height: 100%;
+  min-height: 560px;
+  margin-inline: auto;
+  overflow: hidden;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  background: #050505;
+}
+
+.short-card > video,
+.short-poster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.short-poster {
+  background-position: center;
+  background-size: cover;
+}
+
+.short-shade {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.92), transparent 52%);
+}
+
+.short-copy {
+  position: absolute;
+  z-index: 2;
+  right: 92px;
+  bottom: 36px;
+  left: 26px;
+}
+
+.short-copy h2 {
+  margin: 10px 0;
+  font-size: clamp(25px, 4vw, 42px);
+  line-height: 1.02;
+}
+
+.short-copy p {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0 0 12px;
+  color: #e2e7ec;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.short-related,
+.short-copy small {
+  display: block;
+  margin-top: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.short-actions {
+  position: absolute;
+  z-index: 3;
+  right: 14px;
+  bottom: 28px;
+  display: grid;
+  gap: 9px;
+}
+
+.short-actions button {
+  display: grid;
+  width: 66px;
+  min-height: 56px;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(7, 17, 26, 0.78);
+  color: white;
+  cursor: pointer;
+  font-size: 21px;
+}
+
+.short-actions span {
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.short-comments {
+  position: absolute;
+  z-index: 5;
+  inset: 8% 0 0;
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 18px 18px 0 0;
+  background: rgba(5, 13, 20, 0.98);
+}
+
+.short-comments .community-panel {
+  margin-top: 0;
+}
+
+.short-comments-close {
+  position: sticky;
+  z-index: 2;
+  top: 0;
+  float: right;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-strong);
+  color: white;
+  cursor: pointer;
+}
+
+.shorts-end {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+  background: #050505;
+  scroll-snap-align: start;
+}
+
+.shorts-end a {
+  padding: 14px 20px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: white;
+  font-weight: 800;
+}
+
+.media-empty {
+  display: grid;
+  min-height: 65vh;
+  place-items: center;
+  margin: 0;
+  color: var(--muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .share-controls {
@@ -931,6 +1272,20 @@ img {
     align-items: flex-start;
     flex-direction: column;
     justify-content: center;
+  }
+
+  .shorts-feed {
+    height: calc(100svh - 124px);
+  }
+
+  .short-copy {
+    right: 78px;
+    bottom: 24px;
+    left: 18px;
+  }
+
+  .short-actions button {
+    width: 56px;
   }
 }
 

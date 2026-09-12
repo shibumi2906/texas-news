@@ -232,7 +232,7 @@ class IngestionService:
             content = ContentItem(
                 external_id=str(envelope.package_id),
                 slug=self._story_slug(envelope.content.title, envelope.package_id),
-                content_type=ContentType.ARTICLE,
+                content_type=ContentType(envelope.content.content_type),
                 status=self._content_status(envelope.operation),
                 upstream_status=self._content_status(envelope.operation),
                 source_id=sources[0].id if sources else None,
@@ -280,6 +280,11 @@ class IngestionService:
                 body=envelope.content.body,
                 metadata_={
                     "subtitle": envelope.content.lead,
+                    "content_type": (
+                        envelope.content.content_type
+                        if "content_type" in envelope.content.model_fields_set
+                        else content.content_type.value
+                    ),
                     "package_id": str(envelope.package_id),
                     "schema_version": envelope.schema_version,
                     "operation": envelope.operation,
@@ -324,6 +329,8 @@ class IngestionService:
         elif not editorial_lifecycle:
             content.status = ContentStatus.RECEIVED
         content.source_id = sources[0].id if sources else None
+        if "content_type" in envelope.content.model_fields_set:
+            content.content_type = ContentType(envelope.content.content_type)
         content.original_url = envelope.content.canonical_url
         content.original_language = envelope.content.language
         content.primary_language = envelope.content.language
@@ -692,7 +699,7 @@ class IngestionService:
         self, content_id: UUID, envelope: CanonicalNewsPackageEnvelope
     ) -> list[UUID]:
         media_ids: list[UUID] = []
-        for item in envelope.media:
+        for position, item in enumerate(envelope.media):
             media_type = MediaType(item.type)
             existing = await self.session.scalar(
                 select(MediaAsset).where(
@@ -702,10 +709,12 @@ class IngestionService:
                 )
             )
             if existing is not None:
+                existing.position = position
                 media_ids.append(existing.id)
                 continue
             asset = MediaAsset(
                 content_item_id=content_id,
+                position=position,
                 type=media_type,
                 source_url=item.source_url,
                 mime_type=item.mime_type,

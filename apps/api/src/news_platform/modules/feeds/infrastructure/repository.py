@@ -14,6 +14,7 @@ from news_platform.modules.content.domain.models import (
     ContentCategory,
     ContentGeography,
     ContentItem,
+    ContentType,
 )
 from news_platform.modules.engagement.domain.models import ContentEngagementCounter
 from news_platform.modules.feeds.domain.cursor import FeedCursor
@@ -75,6 +76,7 @@ class FeedRepository:
         cursor: FeedCursor | None,
         category: Category | None = None,
         geography: GeographyNode | None = None,
+        content_types: set[ContentType] | None = None,
     ) -> tuple[list[RankedContentRecord], bool]:
         statement = self.public.eligible_statement(portal, now).where(
             self.public.representation_available(portal, language)
@@ -88,6 +90,8 @@ class FeedRepository:
                 )
                 .exists()
             )
+        if content_types:
+            statement = statement.where(ContentItem.content_type.in_(content_types))
         if geography is not None:
             geography_scope = (
                 select(GeographyNode.id)
@@ -139,6 +143,7 @@ class FeedRepository:
         items: list[tuple[UUID, datetime]],
         category: Category | None = None,
         geography: GeographyNode | None = None,
+        content_types: set[ContentType] | None = None,
     ) -> bool:
         if not items:
             return True
@@ -171,6 +176,8 @@ class FeedRepository:
                 )
                 .exists()
             )
+        if content_types:
+            statement = statement.where(ContentItem.content_type.in_(content_types))
         if geography is not None:
             geography_scope = (
                 select(GeographyNode.id)

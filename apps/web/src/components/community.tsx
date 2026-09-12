@@ -24,8 +24,6 @@ type Comment = {
   created_at: string;
 };
 
-const root = "/api/v1/portals/texas";
-
 function cookie(name: string) {
   return document.cookie
     .split("; ")
@@ -35,7 +33,11 @@ function cookie(name: string) {
     .join("=");
 }
 
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+async function api<T>(
+  portalSlug: string,
+  path: string,
+  init?: RequestInit,
+): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
   if (init?.body) headers.set("Content-Type", "application/json");
@@ -43,18 +45,32 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (csrf && init?.method && !["GET", "HEAD"].includes(init.method)) {
     headers.set("X-CSRF-Token", decodeURIComponent(csrf));
   }
-  const response = await fetch(`${root}${path}`, {
-    ...init,
-    headers,
-    credentials: "same-origin",
-  });
+  const response = await fetch(
+    `/api/v1/portals/${encodeURIComponent(portalSlug)}${path}`,
+    {
+      ...init,
+      headers,
+      credentials: "same-origin",
+    },
+  );
   if (!response.ok) throw new Error(`Request failed (${response.status})`);
   return (await response.json()) as T;
 }
 
-function Account({ user, onAuth }: { user: User | null; onAuth: () => void }) {
+function Account({
+  user,
+  portalSlug,
+  language,
+  onAuth,
+}: {
+  user: User | null;
+  portalSlug: string;
+  language: string;
+  onAuth: () => void;
+}) {
   const [mode, setMode] = useState<"login" | "register">("login");
   const [message, setMessage] = useState("");
+  const es = language === "es";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -66,14 +82,22 @@ function Account({ user, onAuth }: { user: User | null; onAuth: () => void }) {
     if (mode === "register")
       body.display_name = String(data.get("display_name"));
     try {
-      await api(`/auth/${mode}`, {
+      await api(portalSlug, `/auth/${mode}`, {
         method: "POST",
         body: JSON.stringify(body),
       });
       setMessage("");
       onAuth();
     } catch {
-      setMessage(mode === "login" ? "Sign-in failed." : "Registration failed.");
+      setMessage(
+        mode === "login"
+          ? es
+            ? "No se pudo iniciar sesión."
+            : "Sign-in failed."
+          : es
+            ? "No se pudo completar el registro."
+            : "Registration failed.",
+      );
     }
   }
 
@@ -84,7 +108,7 @@ function Account({ user, onAuth }: { user: User | null; onAuth: () => void }) {
         onSubmit={async (event) => {
           event.preventDefault();
           const data = new FormData(event.currentTarget);
-          await api("/auth/profile", {
+          await api(portalSlug, "/auth/profile", {
             method: "PUT",
             body: JSON.stringify({
               display_name: data.get("display_name"),
@@ -97,30 +121,34 @@ function Account({ user, onAuth }: { user: User | null; onAuth: () => void }) {
           onAuth();
         }}
       >
-        <span>Signed in as {user.display_name}</span>
+        <span>
+          {es ? "Sesión iniciada como" : "Signed in as"} {user.display_name}
+        </span>
         <input
-          aria-label="Display name"
+          aria-label={es ? "Nombre visible" : "Display name"}
           name="display_name"
           defaultValue={user.display_name}
           maxLength={80}
           required
         />
         <input
-          aria-label="Profile bio"
+          aria-label={es ? "Biografía del perfil" : "Profile bio"}
           name="bio"
           defaultValue={user.bio ?? ""}
           maxLength={500}
-          placeholder="Short bio"
+          placeholder={es ? "Biografía breve" : "Short bio"}
         />
-        <button type="submit">Update profile</button>
+        <button type="submit">
+          {es ? "Actualizar perfil" : "Update profile"}
+        </button>
         <button
           type="button"
           onClick={async () => {
-            await api("/auth/logout", { method: "POST" });
+            await api(portalSlug, "/auth/logout", { method: "POST" });
             onAuth();
           }}
         >
-          Log out
+          {es ? "Cerrar sesión" : "Log out"}
         </button>
       </form>
     );
@@ -128,26 +156,57 @@ function Account({ user, onAuth }: { user: User | null; onAuth: () => void }) {
   return (
     <form className="auth-form" onSubmit={submit}>
       <h3>
-        {mode === "login" ? "Join the conversation" : "Create your profile"}
+        {mode === "login"
+          ? es
+            ? "Únete a la conversación"
+            : "Join the conversation"
+          : es
+            ? "Crea tu perfil"
+            : "Create your profile"}
       </h3>
       {mode === "register" ? (
-        <input name="display_name" placeholder="Display name" required />
+        <input
+          name="display_name"
+          placeholder={es ? "Nombre visible" : "Display name"}
+          required
+        />
       ) : null}
-      <input name="email" type="email" placeholder="Email" required />
+      <input
+        name="email"
+        type="email"
+        placeholder={es ? "Correo electrónico" : "Email"}
+        required
+      />
       <input
         name="password"
         type="password"
         minLength={12}
-        placeholder="Password (12+ characters)"
+        placeholder={
+          es ? "Contraseña (12+ caracteres)" : "Password (12+ characters)"
+        }
         required
       />
-      <button type="submit">{mode === "login" ? "Log in" : "Register"}</button>
+      <button type="submit">
+        {mode === "login"
+          ? es
+            ? "Iniciar sesión"
+            : "Log in"
+          : es
+            ? "Registrarse"
+            : "Register"}
+      </button>
       <button
         type="button"
         className="text-button"
         onClick={() => setMode(mode === "login" ? "register" : "login")}
       >
-        {mode === "login" ? "Create an account" : "Use an existing account"}
+        {mode === "login"
+          ? es
+            ? "Crear una cuenta"
+            : "Create an account"
+          : es
+            ? "Usar una cuenta existente"
+            : "Use an existing account"}
       </button>
       {message ? <p role="alert">{message}</p> : null}
     </form>
@@ -155,68 +214,102 @@ function Account({ user, onAuth }: { user: User | null; onAuth: () => void }) {
 }
 
 export function CommunityPanel({
+  portalSlug = "texas",
+  language = "en",
   storySlug,
   entities,
 }: {
+  portalSlug?: string;
+  language?: string;
   storySlug: string;
   entities: Entity[];
 }) {
   const [user, setUser] = useState<User | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [notice, setNotice] = useState("");
+  const es = language === "es";
 
   const refresh = useCallback(async () => {
     const page = await api<{ items: Comment[] }>(
+      portalSlug,
       `/community/stories/${encodeURIComponent(storySlug)}/comments`,
     );
     setComments(page.items);
     try {
-      setUser(await api<User>("/auth/me"));
+      setUser(await api<User>(portalSlug, "/auth/me"));
     } catch {
       setUser(null);
     }
-  }, [storySlug]);
+  }, [portalSlug, storySlug]);
 
   useEffect(() => {
     const pending = window.setTimeout(() => {
       void refresh().catch(() =>
-        setNotice("Comments are temporarily unavailable."),
+        setNotice(
+          es
+            ? "Los comentarios no están disponibles temporalmente."
+            : "Comments are temporarily unavailable.",
+        ),
       );
     }, 0);
     return () => window.clearTimeout(pending);
-  }, [refresh]);
+  }, [es, refresh]);
 
   async function postComment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const data = new FormData(form);
-    await api(`/community/stories/${encodeURIComponent(storySlug)}/comments`, {
-      method: "POST",
-      body: JSON.stringify({ id: crypto.randomUUID(), body: data.get("body") }),
-    });
+    await api(
+      portalSlug,
+      `/community/stories/${encodeURIComponent(storySlug)}/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          id: crypto.randomUUID(),
+          body: data.get("body"),
+        }),
+      },
+    );
     form.reset();
     await refresh();
   }
 
   async function action(path: string, method = "PUT", body?: object) {
-    if (!user) return setNotice("Log in to use community features.");
-    await api(path, { method, body: body ? JSON.stringify(body) : undefined });
-    setNotice("Saved.");
+    if (!user)
+      return setNotice(
+        es
+          ? "Inicia sesión para usar las funciones de la comunidad."
+          : "Log in to use community features.",
+      );
+    await api(portalSlug, path, {
+      method,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    setNotice(es ? "Guardado." : "Saved.");
     await refresh();
   }
 
   async function reply(comment: Comment) {
-    if (!user) return setNotice("Log in to reply.");
-    const body = window.prompt(`Reply to ${comment.author_name}`)?.trim();
+    if (!user)
+      return setNotice(
+        es ? "Inicia sesión para responder." : "Log in to reply.",
+      );
+    const body = window
+      .prompt(`${es ? "Responder a" : "Reply to"} ${comment.author_name}`)
+      ?.trim();
     if (!body) return;
-    await api(`/community/stories/${encodeURIComponent(storySlug)}/comments`, {
-      method: "POST",
-      body: JSON.stringify({
-        id: crypto.randomUUID(),
-        body,
-        parent_id: comment.id,
-      }),
-    });
+    await api(
+      portalSlug,
+      `/community/stories/${encodeURIComponent(storySlug)}/comments`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          id: crypto.randomUUID(),
+          body,
+          parent_id: comment.id,
+        }),
+      },
+    );
     await refresh();
   }
 
@@ -224,8 +317,8 @@ export function CommunityPanel({
     <section className="community-panel" aria-labelledby="community-title">
       <div className="community-heading">
         <div>
-          <span className="page-kicker">Community</span>
-          <h2 id="community-title">Texas talks</h2>
+          <span className="page-kicker">{es ? "Comunidad" : "Community"}</span>
+          <h2 id="community-title">{es ? "Texas conversa" : "Texas talks"}</h2>
         </div>
         <div className="community-actions">
           <button
@@ -238,7 +331,7 @@ export function CommunityPanel({
               )
             }
           >
-            Like
+            {es ? "Me gusta" : "Like"}
           </button>
           <button
             type="button"
@@ -250,7 +343,7 @@ export function CommunityPanel({
               )
             }
           >
-            Love
+            {es ? "Me encanta" : "Love"}
           </button>
           <button
             type="button"
@@ -260,7 +353,7 @@ export function CommunityPanel({
               )
             }
           >
-            Save
+            {es ? "Guardar" : "Save"}
           </button>
           {entities[0] ? (
             <button
@@ -269,20 +362,29 @@ export function CommunityPanel({
                 void action(`/community/follows/entity/${entities[0].id}`)
               }
             >
-              Follow {entities[0].name}
+              {es ? "Seguir a" : "Follow"} {entities[0].name}
             </button>
           ) : null}
         </div>
       </div>
-      <Account user={user} onAuth={() => void refresh()} />
+      <Account
+        user={user}
+        portalSlug={portalSlug}
+        language={language}
+        onAuth={() => void refresh()}
+      />
       {user ? (
         <form
           className="comment-form"
           onSubmit={(event) => void postComment(event)}
         >
-          <label htmlFor="comment-body">Add a comment</label>
+          <label htmlFor="comment-body">
+            {es ? "Añadir un comentario" : "Add a comment"}
+          </label>
           <textarea id="comment-body" name="body" maxLength={4000} required />
-          <button type="submit">Post comment</button>
+          <button type="submit">
+            {es ? "Publicar comentario" : "Post comment"}
+          </button>
         </form>
       ) : null}
       {notice ? (
@@ -303,7 +405,7 @@ export function CommunityPanel({
             <p>{comment.body}</p>
             <div>
               <button type="button" onClick={() => void reply(comment)}>
-                Reply
+                {es ? "Responder" : "Reply"}
               </button>
               <button
                 type="button"
@@ -315,7 +417,7 @@ export function CommunityPanel({
                   )
                 }
               >
-                Like {comment.score || ""}
+                {es ? "Me gusta" : "Like"} {comment.score || ""}
               </button>
               <button
                 type="button"
@@ -327,7 +429,7 @@ export function CommunityPanel({
                   )
                 }
               >
-                Report
+                {es ? "Denunciar" : "Report"}
               </button>
             </div>
           </li>

@@ -5,12 +5,17 @@ export type Geography = { name: string; slug: string; type: string };
 export type Entity = { id: string; name: string; slug: string; type: string };
 export type Source = { name: string; url: string | null };
 export type Media = {
+  id: string;
   type: string;
   url: string;
   thumbnail_url: string | null;
+  mime_type: string | null;
   width: number | null;
   height: number | null;
+  duration: number | null;
+  position: number;
   attribution: string | null;
+  provider: string | null;
 };
 
 export type Portal = {
@@ -54,6 +59,7 @@ export type Homepage = {
   trending: StorySummary[];
   category_sections: { category: Category; items: StorySummary[] }[];
   video_highlights: StorySummary[];
+  media_highlights: StorySummary[];
 };
 
 export type FeedPageData = {
@@ -65,7 +71,8 @@ export type FeedPageData = {
     | "local"
     | "trending"
     | "for_you"
-    | "following";
+    | "following"
+    | "shorts";
   scope: string | null;
   label: string;
   language: string;
@@ -117,7 +124,8 @@ export const getHomepage = cache((language = "en") =>
   ),
 );
 
-type FeedKind = "home" | "latest" | "trending" | "category" | "local";
+type FeedKind =
+  "home" | "latest" | "trending" | "category" | "local" | "shorts";
 
 function feedPath(kind: FeedKind, scope?: string): string {
   if (kind === "category")
@@ -150,6 +158,9 @@ export const getLatest = (cursor?: string, language = "en") =>
 
 export const getTrending = (cursor?: string, language = "en") =>
   getFeed("trending", undefined, cursor, 12, language);
+
+export const getShorts = (cursor?: string, language = "en") =>
+  getFeed("shorts", undefined, cursor, 12, language);
 
 export const getLocal = (geography: string, cursor?: string, language = "en") =>
   getFeed("local", geography, cursor, 12, language);

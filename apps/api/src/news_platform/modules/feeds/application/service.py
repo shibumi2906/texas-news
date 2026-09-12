@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from news_platform.modules.content.domain.models import ContentType
 from news_platform.modules.feeds.domain.cursor import FeedCursor
 from news_platform.modules.feeds.domain.schemas import FeedKind, PublicFeedPage
 from news_platform.modules.feeds.infrastructure.cache import FeedCache
@@ -69,6 +70,13 @@ class FeedService:
             path = f"/local/{geography.slug}"
         elif feed is FeedKind.HOME:
             path = ""
+        elif feed is FeedKind.SHORTS:
+            if not portal.feature_flags.get("shorts", False):
+                raise PublicNotFoundError("shorts are disabled for portal")
+            label = "Shorts"
+            path = "/shorts"
+
+        content_types = {ContentType.SHORT} if feed is FeedKind.SHORTS else None
 
         cache_epoch = await self.cache.epoch()
         cursor = (
@@ -100,6 +108,7 @@ class FeedService:
             items=[(item.id, item.updated_at) for item in cached.items],
             category=category,
             geography=geography,
+            content_types=content_types,
         ):
             return cached
 
@@ -122,6 +131,7 @@ class FeedService:
                 cursor=cursor,
                 category=category,
                 geography=geography,
+                content_types=content_types,
             )
         next_cursor = self._next_cursor(
             feed,
