@@ -19,27 +19,11 @@ from news_platform.modules.ai.domain.admin_schemas import (
     PromptVersionCreate,
     PromptVersionView,
 )
-from news_platform.modules.users.api.dependencies import csrf_protected_user, current_user
+from news_platform.modules.users.api.dependencies import admin_csrf_user, admin_user
 from news_platform.modules.users.application.service import AuthenticatedUser
 
 router = APIRouter(prefix="/api/v1/portals/{portal_slug}/admin/ai", tags=["ai-admin"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
-
-
-async def admin_user(
-    auth: Annotated[AuthenticatedUser, Depends(current_user)],
-) -> AuthenticatedUser:
-    if auth.user.role != "admin":
-        raise HTTPException(403, detail={"code": "ADMIN_REQUIRED"})
-    return auth
-
-
-async def admin_csrf_user(
-    auth: Annotated[AuthenticatedUser, Depends(csrf_protected_user)],
-) -> AuthenticatedUser:
-    if auth.user.role != "admin":
-        raise HTTPException(403, detail={"code": "ADMIN_REQUIRED"})
-    return auth
 
 
 ReadAdmin = Annotated[AuthenticatedUser, Depends(admin_user)]

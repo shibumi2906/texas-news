@@ -13,6 +13,8 @@ from news_platform.infrastructure.redis import create_redis_client
 from news_platform.modules.analytics.application.service import process_analytics_once
 from news_platform.modules.editorial.application.service import EditorialService
 from news_platform.modules.feeds.infrastructure.cache import invalidate_public_feed_cache
+from news_platform.modules.notifications.application.service import process_notifications_once
+from news_platform.modules.notifications.infrastructure.gateways import NotificationGateway
 from news_platform.modules.recommendations.application.service import process_affinities_once
 
 logger = logging.getLogger(__name__)
@@ -77,6 +79,20 @@ async def run() -> None:
                         )
                 except Exception:
                     logger.exception("analytics_and_recommendation_iteration_failed")
+            if settings.notification_worker_enabled:
+                try:
+                    sent, failed = await process_notifications_once(
+                        session_factory,
+                        NotificationGateway(settings),
+                        settings.notification_worker_batch_size,
+                    )
+                    if sent or failed:
+                        logger.info(
+                            "notification_delivery_completed",
+                            extra={"sent": sent, "failed": failed},
+                        )
+                except Exception:
+                    logger.exception("notification_delivery_iteration_failed")
             enabled_intervals = [
                 interval
                 for enabled, interval in (
@@ -87,6 +103,10 @@ async def run() -> None:
                     (
                         settings.analytics_worker_enabled,
                         settings.analytics_worker_poll_seconds,
+                    ),
+                    (
+                        settings.notification_worker_enabled,
+                        settings.notification_worker_poll_seconds,
                     ),
                 )
                 if enabled

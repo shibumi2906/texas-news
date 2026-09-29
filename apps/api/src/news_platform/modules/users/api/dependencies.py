@@ -54,3 +54,19 @@ def require_moderator(auth: AuthenticatedUser) -> AuthenticatedUser:
     if auth.user.role not in {"moderator", "admin"}:
         raise HTTPException(403, detail={"code": "MODERATOR_REQUIRED"})
     return auth
+
+
+async def admin_user(
+    auth: Annotated[AuthenticatedUser, Depends(current_user)],
+) -> AuthenticatedUser:
+    if auth.user.role != "admin":
+        raise HTTPException(403, detail={"code": "ADMIN_REQUIRED"})
+    return auth
+
+
+async def admin_csrf_user(
+    auth: Annotated[AuthenticatedUser, Depends(csrf_protected_user)],
+) -> AuthenticatedUser:
+    if auth.user.role != "admin":
+        raise HTTPException(403, detail={"code": "ADMIN_REQUIRED"})
+    return auth

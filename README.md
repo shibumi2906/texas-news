@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 14 adds portal-scoped AI administration on top of the Phase 10 provider boundary and Phase 11 grounded tasks. It preserves the Phase 0–13 ingestion, publication, visibility, multilingual, ranking, analytics, recommendation, community, and media boundaries. Advertising and notifications remain deferred.
+Phase 15 adds portal-scoped advertising and consent-based email/web-push notifications. It preserves the Phase 0–14 ingestion, publication, visibility, multilingual, ranking, analytics, recommendation, community, media, AI, and admin boundaries. Both public delivery features remain disabled by default for the Texas seed portal.
 
 ## Prerequisites
 
@@ -58,9 +58,23 @@ All supported Phase 0 variables are documented in `.env.example`:
 - `FEED_CACHE_TTL_SECONDS`
 - `ANALYTICS_EVENT_MAX_AGE_DAYS`, `ANALYTICS_FUTURE_SKEW_SECONDS`
 - `ANALYTICS_WORKER_ENABLED`, `ANALYTICS_WORKER_POLL_SECONDS`, `ANALYTICS_WORKER_BATCH_SIZE`
+- `NOTIFICATION_WORKER_ENABLED`, `NOTIFICATION_WORKER_POLL_SECONDS`, `NOTIFICATION_WORKER_BATCH_SIZE`
+- `NOTIFICATION_GATEWAY_TIMEOUT_SECONDS`
+- `NOTIFICATION_EMAIL_GATEWAY_URL`, `NOTIFICATION_EMAIL_GATEWAY_KEY`
+- `NOTIFICATION_WEB_PUSH_GATEWAY_URL`, `NOTIFICATION_WEB_PUSH_GATEWAY_KEY`
 - `WEB_PORT`, `API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`
 
 Compose supplies container-network database and Redis URLs to backend services. Host commands use `DATABASE_URL` and `REDIS_URL` from `.env`.
+
+Gateway keys are secrets and are never returned by APIs or written to structured logs. Empty gateway URLs/keys are valid for local startup; queued deliveries fail with the non-secret `gateway_not_configured` code. Configured gateways receive `Idempotency-Key: <delivery UUID>` and must honor it across retries.
+
+## Phase 15 advertising and notifications
+
+Advertising is owned by the `advertising` backend module. Admins manage portal-scoped placements and full campaign definitions (window, priority, targeting, and creatives) under `/api/v1/portals/{portal}/admin/advertising`. Public selection under `/ads/placements/{code}` checks the portal feature flag, active window, placement, language, geography, category, content type, and shared public-content eligibility. Equal-priority campaigns and creatives are selected deterministically from the portal, placement, opaque reader identity, and canonical `ContentItem.id`. Impression and click UUIDs provide exact replay behavior; conflicting reuse is rejected and ad tracking does not create another content identity.
+
+Authenticated users own notification subscriptions under `/notifications/subscriptions`. Email always resolves from the authenticated account; web-push endpoint and keys are write-only and admin summaries expose counts only. Admin notification messages require the existing admin role and CSRF protection, optionally bind to an eligible canonical content item, create one durable delivery per enabled matching subscription, and write an editorial audit event. The worker claims pending deliveries with PostgreSQL row locks and sends through the configured email/web-push gateway adapters. Provider calls carry the delivery UUID as their idempotency key. `/admin/distribution` exposes placements, campaigns, tracking totals, subscription/delivery totals, and notification dispatch.
+
+Migration `0016_phase_15_ads_notifications` creates all advertising, tracking, subscription, message, and delivery tables. Its downgrade removes only Phase 15 state. The Texas seed explicitly keeps `advertising=false` and `notifications=false`; enabling either is a tenant operational decision, not a schema migration side effect.
 
 ## Backend host development
 

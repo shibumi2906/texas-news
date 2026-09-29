@@ -10,6 +10,8 @@ from news_platform.core.config import Settings, get_settings
 from news_platform.core.logging import RequestLoggingMiddleware, configure_logging
 from news_platform.infrastructure.database import create_db_engine, create_session_factory
 from news_platform.infrastructure.redis import create_redis_client
+from news_platform.modules.advertising.api.router import admin_router as advertising_admin_router
+from news_platform.modules.advertising.api.router import router as advertising_router
 from news_platform.modules.ai.api.admin_router import router as ai_admin_router
 from news_platform.modules.ai.api.router import router as ai_router
 from news_platform.modules.ai.infrastructure.providers import ProviderRegistry
@@ -19,6 +21,10 @@ from news_platform.modules.editorial.api.router import router as editorial_route
 from news_platform.modules.engagement.api.router import router as engagement_router
 from news_platform.modules.feeds.api.router import router as feeds_router
 from news_platform.modules.ingestion.api.router import router as ingestion_router
+from news_platform.modules.notifications.api.router import (
+    admin_router as notifications_admin_router,
+)
+from news_platform.modules.notifications.api.router import router as notifications_router
 from news_platform.modules.public_site.api.router import router as public_site_router
 from news_platform.modules.recommendations.api.router import (
     feed_router as recommendation_feed_router,
@@ -67,6 +73,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(recommendation_feed_router)
     application.include_router(ai_router)
     application.include_router(ai_admin_router)
+    application.include_router(advertising_router)
+    application.include_router(advertising_admin_router)
+    application.include_router(notifications_router)
+    application.include_router(notifications_admin_router)
     return application
 
 

@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     ai_local_stub_response_mode: str = Field(
         default="success", pattern="^(success|malformed|provider_error|rate_limit|timeout)$"
     )
+    notification_worker_enabled: bool = True
+    notification_worker_poll_seconds: int = Field(default=5, ge=1, le=3600)
+    notification_worker_batch_size: int = Field(default=100, ge=1, le=1000)
+    notification_gateway_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    notification_email_gateway_url: str | None = None
+    notification_email_gateway_key: SecretStr | None = None
+    notification_web_push_gateway_url: str | None = None
+    notification_web_push_gateway_key: SecretStr | None = None
 
 
 @lru_cache

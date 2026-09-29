@@ -1,5 +1,13 @@
 """Import all Phase 1 models so SQLAlchemy metadata is complete."""
 
+from news_platform.modules.advertising.domain.models import (
+    AdCampaign,
+    AdClick,
+    AdCreative,
+    AdImpression,
+    AdPlacement,
+    AdTargeting,
+)
 from news_platform.modules.ai.domain.models import (
     AIExecution,
     AIExperiment,
@@ -40,6 +48,11 @@ from news_platform.modules.ingestion.domain.models import (
 )
 from news_platform.modules.localization.domain.models import Translation
 from news_platform.modules.media.domain.models import MediaAsset
+from news_platform.modules.notifications.domain.models import (
+    NotificationDelivery,
+    NotificationMessage,
+    NotificationSubscription,
+)
 from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.recommendations.domain.models import (
     RecommendationGeneration,
@@ -52,6 +65,12 @@ from news_platform.modules.taxonomy.domain.models import Category, Topic
 from news_platform.modules.users.domain.models import AuthSession, User, UserIdentity, UserProfile
 
 __all__ = [
+    "AdCampaign",
+    "AdClick",
+    "AdCreative",
+    "AdImpression",
+    "AdPlacement",
+    "AdTargeting",
     "AIExecution",
     "AIExperiment",
     "AIResult",
@@ -79,6 +98,9 @@ __all__ = [
     "IntegratorConnection",
     "MediaAsset",
     "ModerationAuditLog",
+    "NotificationDelivery",
+    "NotificationMessage",
+    "NotificationSubscription",
     "Portal",
     "PromptDefinition",
     "PromptVersion",

@@ -1,4 +1,4 @@
-# Platform architecture through Phase 9
+# Platform architecture through Phase 15
 
 The Site Platform begins as a modular monolith in one monorepo:
 
@@ -35,4 +35,8 @@ Phase 8 adds durable portal-bound authentication and the users/community boundar
 
 Phase 9 adds the `recommendations` module. PostgreSQL owns explicit interests, decayed category/entity/geography affinity, exactly-once signal receipts, and user/portal ranking generations. The worker consumes only authenticated future events; anonymous history remains anonymous. For You uses deterministic configured signals, immutable aggregation-time engagement snapshots, freshness, interests, follows, and affinity. Following uses current follow state. Both feeds reuse the public read model and reject user-, portal-, language-, feed-, or generation-mismatched cursors. Redis remains outside private ranking correctness.
 
-The Site still defers Integrator replay-control tooling, media downloading, notifications, advertising, Site AI, full admin frontend, multilingual expansion, embeddings, semantic similarity, collaborative filtering, AI reranking, and later-phase media UX.
+Phase 15 adds independent `advertising` and `notifications` modules. Ad placement/campaign/creative/targeting state and immutable impression/click identities are portal-bound. Delivery derives targeting from validated portal geography/taxonomy and the canonical `ContentItem.id`, reusing the shared public eligibility query whenever content is present. Stable hashing makes equal-priority selection reproducible without creating a second content identity.
+
+Notification subscriptions are owned by an authenticated user and portal. Push credentials and destinations stay out of admin read models and logs. Admin-created messages atomically create a durable delivery outbox and audit entry. The worker uses `SKIP LOCKED`, bounded retries, and provider idempotency keys; PostgreSQL remains authoritative if gateways or Redis are unavailable.
+
+The Site still defers Integrator replay-control tooling, media downloading, mobile push, embeddings, semantic similarity, collaborative filtering, AI reranking, and functionality after Phase 15.

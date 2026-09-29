@@ -342,6 +342,8 @@ async def test_texas_seed_is_complete_and_idempotent(session: AsyncSession) -> N
     assert portal is not None
     assert portal.primary_geography_id == texas.id
     assert portal.supported_languages == ["en", "es"]
+    assert portal.feature_flags["advertising"] is False
+    assert portal.feature_flags["notifications"] is False
 
     portal.default_language = "fr"
     portal.supported_languages = [*portal.supported_languages, "fr"]
