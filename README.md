@@ -1,6 +1,6 @@
 # Local Entertainment News Platform
 
-Phase 13 adds canonical gallery, meme, Short, event, and live experiences to the Texas portal. It preserves the Phase 0–12 ingestion, publication, visibility, multilingual, ranking, analytics, recommendation, and community boundaries. Advanced admin, advertising, and notifications remain deferred.
+Phase 14 adds portal-scoped AI administration on top of the Phase 10 provider boundary and Phase 11 grounded tasks. It preserves the Phase 0–13 ingestion, publication, visibility, multilingual, ranking, analytics, recommendation, community, and media boundaries. Advertising and notifications remain deferred.
 
 ## Prerequisites
 
@@ -361,8 +361,7 @@ excluded by the shared public eligibility policy.
 The `ai_search` and `ai_chat` portal flags, shared Redis rate limiter, `ai_query` behavioral event,
 structured output validation, provider fallback, telemetry, and content-derived cache are reused
 end to end. The search page provides AI Search plus trending/today shortcuts, while story pages add
-an on-demand **Ask about this story** panel. AI administration, prompt/model A/B testing, and
-external web search remain deferred.
+an on-demand **Ask about this story** panel. External web search remains deferred.
 
 ## Phase 12 multilingual publishing
 
@@ -427,6 +426,26 @@ the existing video/source URL and does not add a streaming backend.
 The idempotent Texas development seed includes bilingual gallery, meme, three Shorts, event, and live
 fixtures so the extended media routes can be smoke-tested locally. Phase 13 adds no environment
 variables.
+
+## Phase 14 AI administration
+
+The authenticated Admin UI is available at `/admin/ai`. It uses the existing session and CSRF
+protection and scopes configuration, prompt versions, experiments, and usage analytics to the
+selected portal (`/api/v1/portals/{portal_slug}/admin/ai`). Only users with the `admin` role can
+access it. Routing remains inside the Phase 10 AI service/provider registry; Admin never calls an
+AI provider directly. Server-side provider allowlists and credentials remain authoritative, and
+credentials are not returned by the API or displayed in the UI.
+
+Per-task controls include the primary route, ordered fallbacks, enabled providers, cost/token
+budgets, retries, timeout, and prompt version. Portal-scoped prompt drafts can be activated and
+used as A/B variants. The dashboard reports the portal's prior 30 days of execution count, cost,
+latency, errors, token totals, model breakdown, and error groups. All configuration, prompt, and
+experiment mutations write an editorial audit record. Migration `0015_phase_14_ai_admin` adds the
+portal-scoped configuration and experiment tables and scopes prompt definitions without removing
+global Phase 10 prompts. No new environment variables are introduced; the existing Phase 10 provider
+configuration continues to govern which routes are usable.
+
+Advertising, campaigns, placements, and notification integrations from Phase 15 are not included.
 
 ## One-command checks
 

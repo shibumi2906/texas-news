@@ -55,7 +55,7 @@ from news_platform.modules.taxonomy.domain.models import Category
 
 pytestmark = [pytest.mark.integration, pytest.mark.asyncio]
 
-NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
+NOW = datetime.now(UTC).replace(microsecond=0)
 
 
 @pytest_asyncio.fixture

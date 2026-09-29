@@ -145,6 +145,7 @@ async def test_effective_fields_and_generated_index(search_db: Any, field: str) 
 
 
 async def test_entity_filters_and_dates(search_db: Any) -> None:
+    event_date = NOW.date()
     async with search_db() as session, session.begin():
         domain = await seed_domain(session)
         first = await add_story(
@@ -169,8 +170,8 @@ async def test_entity_filters_and_dates(search_db: Any) -> None:
                     "entity": entity,
                     "category": "sports",
                     "geography": "texas",
-                    "date_from": "2026-09-05",
-                    "date_to": "2026-09-05",
+                    "date_from": event_date.isoformat(),
+                    "date_to": event_date.isoformat(),
                 },
             )
             assert response.status_code == 200, response.text
@@ -178,8 +179,8 @@ async def test_entity_filters_and_dates(search_db: Any) -> None:
         for filters in [
             {"entity": "unknown"},
             {"entity": "Mavs", "category": "music"},
-            {"date_to": "2026-09-04"},
-            {"date_from": "2026-09-06"},
+            {"date_to": (event_date - timedelta(days=1)).isoformat()},
+            {"date_from": (event_date + timedelta(days=1)).isoformat()},
             {"geography": "dallas", "category": "sports"},
         ]:
             assert (await api.get(BASE, params={"language": "en", **filters})).json()["items"] == []
@@ -255,7 +256,13 @@ async def test_weighted_rank_and_spanish(search_db: Any) -> None:
         ({"limit": 51}, 422),
         ({"limit": 0}, 422),
         ({"date_from": "bad"}, 422),
-        ({"date_from": "2026-09-06", "date_to": "2026-09-05"}, 422),
+        (
+            {
+                "date_from": (NOW.date() + timedelta(days=1)).isoformat(),
+                "date_to": NOW.date().isoformat(),
+            },
+            422,
+        ),
         ({"cursor": "garbage"}, 400),
     ],
 )

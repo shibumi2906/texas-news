@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from time import monotonic
@@ -11,12 +12,18 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from news_platform.core.config import Settings
 from news_platform.modules.ai.application.ports import ProviderError, ProviderRequest
 from news_platform.modules.ai.application.tasks import AITaskDefinition, ModelRouter, TaskManager
-from news_platform.modules.ai.domain.models import AIExecution, AIResult
+from news_platform.modules.ai.domain.models import (
+    AIExecution,
+    AIResult,
+    PromptDefinition,
+    PromptVersion,
+)
 from news_platform.modules.ai.domain.schemas import (
     AIAnswerMetadata,
     AIAnswerResponse,
@@ -211,17 +218,18 @@ class AIService:
         if record is None:
             raise AIResourceNotFoundError("story not found")
 
-        task = TaskManager(self.settings).get("story_summary")
+        task = await self._configured_task(portal.id, "story_summary")
         routes = ModelRouter.candidates(task)
         if not routes:
             raise AIConfigurationError("no allowed model route")
-        prompt = await self.repository.active_prompt(task.task_name, task.prompt_version)
+        prompt, experiment_metadata = await self._prompt_for(portal.id, task, record.content.id)
         if prompt is None:
             raise AIConfigurationError("active prompt version unavailable")
+        cache_task = replace(task, prompt_version=prompt.version)
 
         content_hash = _content_hash(record)
         execution_lock_key = _cache_key(
-            task,
+            cache_task,
             content_hash,
             str(portal.id),
             language,
@@ -232,7 +240,8 @@ class AIService:
         cached_models.append("deterministic:extractive-v1")
         for cached_model in cached_models:
             cached = await self.repository.cached_result(
-                _cache_key(task, content_hash, str(portal.id), language, cached_model), self.now
+                _cache_key(cache_task, content_hash, str(portal.id), language, cached_model),
+                self.now,
             )
             if cached is not None:
                 cached_output = StorySummaryOutput.model_validate(cached.output)
@@ -306,7 +315,7 @@ class AIService:
                     content_id=record.content.id,
                     portal_id=portal.id,
                     prompt_version=prompt.version,
-                    metadata_={"schema_version": task.response_schema},
+                    metadata_={"schema_version": task.response_schema, **experiment_metadata},
                 )
             )
             if output is not None:
@@ -318,7 +327,7 @@ class AIService:
             fallback_used = True
 
         cache_key = _cache_key(
-            task,
+            cache_task,
             content_hash,
             str(portal.id),
             language,
@@ -543,19 +552,20 @@ class AIService:
                 metadata=metadata,
             )
 
-        task = TaskManager(self.settings).get(task_name)
+        task = await self._configured_task(portal.id, task_name)
         routes = ModelRouter.candidates(task)
         if not routes:
             raise AIConfigurationError("no allowed model route")
-        prompt = await self.repository.active_prompt(task.task_name, task.prompt_version)
+        prompt, experiment_metadata = await self._prompt_for(portal.id, task, records[0].content.id)
         if prompt is None:
             raise AIConfigurationError("active prompt version unavailable")
+        cache_task = replace(task, prompt_version=prompt.version)
 
         source = self._answer_source(records, question, task.max_input_tokens)
         source_json = json.dumps(source, ensure_ascii=False, separators=(",", ":"))
         content_hash = hashlib.sha256(source_json.encode()).hexdigest()
         lock_key = _cache_key(
-            task,
+            cache_task,
             content_hash,
             str(portal.id),
             records[0].language,
@@ -568,7 +578,7 @@ class AIService:
         ]:
             cached = await self.repository.cached_result(
                 _cache_key(
-                    task,
+                    cache_task,
                     content_hash,
                     str(portal.id),
                     records[0].language,
@@ -643,6 +653,7 @@ class AIService:
                     metadata_={
                         "schema_version": task.response_schema,
                         "source_count": len(records),
+                        **experiment_metadata,
                     },
                 )
             )
@@ -654,7 +665,7 @@ class AIService:
             output = GroundedAnswerOutput(answer=extractive_answer(source))
             fallback_used = True
         cache_key = _cache_key(
-            task,
+            cache_task,
             content_hash,
             str(portal.id),
             records[0].language,
@@ -689,6 +700,61 @@ class AIService:
             selected_provider != "deterministic",
             False,
         )
+
+    async def _configured_task(self, portal_id: UUID, task_name: str) -> AITaskDefinition:
+        task = TaskManager(self.settings).get(task_name)
+        configured = await self.repository.task_config(portal_id, task_name)
+        if configured is None:
+            return task
+        available = frozenset(
+            provider.strip()
+            for provider in self.settings.ai_allowed_providers.split(",")
+            if provider.strip()
+        )
+        return replace(
+            task,
+            primary_model=configured.primary_model,
+            fallback_models=tuple(configured.fallback_models),
+            allowed_providers=frozenset(configured.allowed_providers).intersection(available),
+            max_cost=configured.max_cost,
+            max_input_tokens=configured.max_input_tokens,
+            max_output_tokens=configured.max_output_tokens,
+            max_retries=configured.max_retries,
+            timeout_seconds=float(configured.timeout_seconds),
+            prompt_version=configured.prompt_version,
+        )
+
+    async def _prompt_for(
+        self, portal_id: UUID, task: AITaskDefinition, content_id: UUID
+    ) -> tuple[PromptVersion | None, dict[str, str]]:
+        experiment = await self.repository.experiment(portal_id, task.task_name)
+        if experiment is not None:
+            digest = hashlib.sha256(
+                f"{portal_id}:{task.task_name}:{content_id}".encode()
+            ).hexdigest()
+            variant = "b" if int(digest[:8], 16) % 100 < experiment.variant_b_percent else "a"
+            version_id = (
+                experiment.prompt_version_b_id if variant == "b" else experiment.prompt_version_a_id
+            )
+            prompt = await self.session.scalar(
+                select(PromptVersion)
+                .join(PromptDefinition, PromptDefinition.id == PromptVersion.prompt_definition_id)
+                .where(
+                    PromptVersion.id == version_id,
+                    PromptVersion.status == "active",
+                    PromptDefinition.task == task.task_name,
+                    PromptDefinition.portal_id == portal_id,
+                )
+            )
+            if prompt is not None:
+                return prompt, {
+                    "experiment_id": str(experiment.id),
+                    "experiment_variant": variant,
+                }
+        prompt = await self.repository.active_prompt(task.task_name, task.prompt_version, portal_id)
+        if prompt is None:
+            prompt = await self.repository.active_prompt(task.task_name, task.prompt_version)
+        return prompt, {}
 
     @staticmethod
     def _answer_source(

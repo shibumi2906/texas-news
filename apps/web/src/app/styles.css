@@ -1323,3 +1323,372 @@ img {
   color: white;
   cursor: pointer;
 }
+/* Phase 14 AI administration */
+.ai-admin-shell {
+  min-height: 100vh;
+  padding: 28px clamp(18px, 4vw, 64px) 72px;
+  color: #f5f4f0;
+  background: #111311;
+}
+
+.ai-admin-header,
+.ai-admin-title,
+.ai-admin-section-heading,
+.ai-admin-task-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.ai-admin-header {
+  padding-bottom: 20px;
+  border-bottom: 1px solid #343936;
+  color: #aeb5ad;
+  font-size: 0.75rem;
+  letter-spacing: 0.11em;
+}
+
+.ai-admin-header a {
+  color: #f5f4f0;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-decoration: none;
+}
+
+.ai-admin-header button,
+.ai-admin-shell button {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  color: #111311;
+  background: #d1f36a;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.ai-admin-shell button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.ai-admin-title {
+  align-items: end;
+  padding: 44px 0 30px;
+}
+
+.ai-admin-title h1,
+.ai-admin-login h1 {
+  margin: 4px 0 12px;
+  font-size: clamp(2.6rem, 6vw, 5rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.ai-admin-title > div > p:last-child,
+.ai-admin-login > p:not(.ai-admin-kicker) {
+  color: #aeb5ad;
+}
+
+.ai-admin-kicker {
+  margin: 0 0 10px;
+  color: #d1f36a;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.ai-admin-provider-state,
+.ai-admin-metrics article,
+.ai-admin-task-card,
+.ai-admin-login {
+  border: 1px solid #343936;
+  border-radius: 18px;
+  background: #191d1a;
+}
+
+.ai-admin-provider-state {
+  display: grid;
+  gap: 8px;
+  min-width: 250px;
+  padding: 18px;
+}
+
+.ai-admin-provider-state span,
+.ai-admin-provider-state small,
+.ai-admin-metrics article span,
+.ai-admin-metrics article small {
+  color: #aeb5ad;
+  font-size: 0.78rem;
+}
+
+.ai-admin-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ai-admin-metrics article {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.ai-admin-metrics article strong {
+  font-size: clamp(1.3rem, 2vw, 2rem);
+  overflow-wrap: anywhere;
+}
+
+.ai-admin-section {
+  margin-top: 54px;
+}
+
+.ai-admin-section h2,
+.ai-admin-lower-grid h2 {
+  margin: 0;
+  font-size: 1.7rem;
+  letter-spacing: -0.035em;
+  text-transform: capitalize;
+}
+
+.ai-admin-section-heading > p {
+  color: #aeb5ad;
+  font-size: 0.85rem;
+}
+
+.ai-admin-task-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.ai-admin-task-card {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+  padding: 22px;
+}
+
+.ai-admin-task-card h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  text-transform: capitalize;
+}
+
+.ai-admin-tag {
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: #c5ccc4;
+  background: #282e29;
+  font-size: 0.68rem;
+}
+
+.ai-admin-tag.override {
+  color: #111311;
+  background: #d1f36a;
+}
+
+.ai-admin-config-form,
+.ai-admin-experiment form,
+.ai-admin-login form,
+.ai-admin-prompt-section details form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ai-admin-shell label {
+  display: grid;
+  gap: 6px;
+  color: #b9c0b8;
+  font-size: 0.73rem;
+}
+
+.ai-admin-shell input,
+.ai-admin-shell textarea,
+.ai-admin-shell select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #424942;
+  border-radius: 9px;
+  padding: 10px 11px;
+  color: #f5f4f0;
+  background: #101310;
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.ai-admin-config-form > button,
+.ai-admin-experiment form > button,
+.ai-admin-prompt-section details form > button {
+  align-self: end;
+  justify-self: start;
+}
+
+.ai-admin-prompt-section,
+.ai-admin-experiment {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #343936;
+  padding-top: 18px;
+}
+
+.ai-admin-prompt-section h4,
+.ai-admin-experiment h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.ai-admin-prompts {
+  display: grid;
+  gap: 8px;
+}
+
+.ai-admin-prompts article {
+  display: grid;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 12px;
+  background: #111512;
+}
+
+.ai-admin-prompts article > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.ai-admin-prompts article span,
+.ai-admin-prompts article small,
+.ai-admin-experiment > small {
+  color: #aeb5ad;
+  font-size: 0.7rem;
+}
+
+.ai-admin-prompts pre {
+  max-height: 120px;
+  margin: 0;
+  overflow: auto;
+  color: #d5dad4;
+  white-space: pre-wrap;
+  font-size: 0.7rem;
+}
+
+.ai-admin-shell summary {
+  width: fit-content;
+  color: #d1f36a;
+  cursor: pointer;
+}
+
+.ai-admin-lower-grid {
+  display: grid;
+  grid-template-columns: 1.3fr 0.7fr;
+  gap: 32px;
+}
+
+.ai-admin-lower-grid > div {
+  min-width: 0;
+}
+
+.ai-admin-table-wrap {
+  margin-top: 14px;
+  overflow-x: auto;
+  border: 1px solid #343936;
+  border-radius: 12px;
+}
+
+.ai-admin-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.ai-admin-table-wrap th,
+.ai-admin-table-wrap td {
+  padding: 12px;
+  border-bottom: 1px solid #343936;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ai-admin-table-wrap th {
+  color: #aeb5ad;
+  font-weight: 600;
+}
+
+.ai-admin-error-list {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ai-admin-error-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #343936;
+  border-radius: 9px;
+  padding: 12px;
+}
+
+.ai-admin-error-list span,
+.ai-admin-empty {
+  color: #aeb5ad;
+}
+
+.ai-admin-error {
+  border-left: 3px solid #ff796d;
+  padding: 10px 12px;
+  color: #ffaaa2;
+  background: #2a1817;
+}
+
+.ai-admin-login {
+  width: min(460px, 100%);
+  box-sizing: border-box;
+  margin: 12vh auto;
+  padding: 28px;
+}
+
+.ai-admin-login form {
+  grid-template-columns: 1fr;
+  margin-top: 22px;
+}
+
+@media (max-width: 1050px) {
+  .ai-admin-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .ai-admin-task-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .ai-admin-title,
+  .ai-admin-section-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+  .ai-admin-provider-state {
+    box-sizing: border-box;
+    width: 100%;
+  }
+  .ai-admin-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ai-admin-lower-grid {
+    grid-template-columns: 1fr;
+  }
+  .ai-admin-config-form,
+  .ai-admin-experiment form,
+  .ai-admin-prompt-section details form {
+    grid-template-columns: 1fr;
+  }
+}

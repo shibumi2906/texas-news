@@ -10,6 +10,7 @@ from news_platform.core.config import Settings, get_settings
 from news_platform.core.logging import RequestLoggingMiddleware, configure_logging
 from news_platform.infrastructure.database import create_db_engine, create_session_factory
 from news_platform.infrastructure.redis import create_redis_client
+from news_platform.modules.ai.api.admin_router import router as ai_admin_router
 from news_platform.modules.ai.api.router import router as ai_router
 from news_platform.modules.ai.infrastructure.providers import ProviderRegistry
 from news_platform.modules.analytics.api.router import router as analytics_router
@@ -65,6 +66,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(recommendations_router)
     application.include_router(recommendation_feed_router)
     application.include_router(ai_router)
+    application.include_router(ai_admin_router)
     return application
 
 

@@ -2,7 +2,9 @@
 
 from news_platform.modules.ai.domain.models import (
     AIExecution,
+    AIExperiment,
     AIResult,
+    AITaskConfig,
     PromptDefinition,
     PromptVersion,
 )
@@ -51,7 +53,9 @@ from news_platform.modules.users.domain.models import AuthSession, User, UserIde
 
 __all__ = [
     "AIExecution",
+    "AIExperiment",
     "AIResult",
+    "AITaskConfig",
     "BehaviorEvent",
     "BehaviorEventAggregation",
     "Category",

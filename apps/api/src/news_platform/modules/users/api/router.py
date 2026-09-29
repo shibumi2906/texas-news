@@ -63,7 +63,7 @@ def _set_cookie(
         httponly=False,
         secure=production,
         samesite="lax",
-        path="/api/v1/portals/",
+        path="/",
         expires=expires_at,
     )
     response.headers["Cache-Control"] = "no-store"
@@ -179,6 +179,6 @@ async def logout(
         await session.rollback()
         raise
     response.delete_cookie(SESSION_COOKIE, path="/api/v1/portals/")
-    response.delete_cookie(CSRF_COOKIE, path="/api/v1/portals/")
+    response.delete_cookie(CSRF_COOKIE, path="/")
     response.headers["Cache-Control"] = "no-store"
     return LogoutView()
