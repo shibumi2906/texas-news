@@ -164,16 +164,28 @@ class NotificationService:
                 )
             ).all()
         )
-        views: list[NotificationMessageView] = []
-        for message in messages:
+        counts_by_message: dict[UUID, dict[str, int]] = {}
+        message_ids = [message.id for message in messages]
+        if message_ids:
             count_rows = (
                 await self.session.execute(
-                    select(NotificationDelivery.status, func.count())
-                    .where(NotificationDelivery.message_id == message.id)
-                    .group_by(NotificationDelivery.status)
+                    select(
+                        NotificationDelivery.message_id,
+                        NotificationDelivery.status,
+                        func.count(),
+                    )
+                    .where(NotificationDelivery.message_id.in_(message_ids))
+                    .group_by(
+                        NotificationDelivery.message_id,
+                        NotificationDelivery.status,
+                    )
                 )
             ).all()
-            counts: dict[str, int] = {str(status): int(count) for status, count in count_rows}
+            for message_id, status, count in count_rows:
+                counts_by_message.setdefault(message_id, {})[str(status)] = int(count)
+        views: list[NotificationMessageView] = []
+        for message in messages:
+            counts = counts_by_message.get(message.id, {})
             views.append(
                 NotificationMessageView(
                     id=message.id,
@@ -317,13 +329,39 @@ class NotificationDeliveryService:
                 )
             ).all()
         )
+        subscription_ids = {delivery.subscription_id for delivery in deliveries}
+        message_ids = {delivery.message_id for delivery in deliveries}
+        subscriptions = (
+            {
+                item.id: item
+                for item in (
+                    await self.session.scalars(
+                        select(NotificationSubscription).where(
+                            NotificationSubscription.id.in_(subscription_ids)
+                        )
+                    )
+                ).all()
+            }
+            if subscription_ids
+            else {}
+        )
+        messages = (
+            {
+                item.id: item
+                for item in (
+                    await self.session.scalars(
+                        select(NotificationMessage).where(NotificationMessage.id.in_(message_ids))
+                    )
+                ).all()
+            }
+            if message_ids
+            else {}
+        )
         sent = 0
         failed = 0
         for delivery in deliveries:
-            subscription = await self.session.get(
-                NotificationSubscription, delivery.subscription_id
-            )
-            message = await self.session.get(NotificationMessage, delivery.message_id)
+            subscription = subscriptions.get(delivery.subscription_id)
+            message = messages.get(delivery.message_id)
             if subscription is None or message is None or not subscription.enabled:
                 delivery.status = "failed"
                 delivery.error_code = "subscription_unavailable"

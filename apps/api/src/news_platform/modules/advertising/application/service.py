@@ -83,6 +83,33 @@ class AdvertisingService:
                 )
             ).all()
         )
+        campaign_ids = [item.id for item in campaigns]
+        targets_by_campaign: dict[UUID, AdTargeting] = {}
+        creatives_by_campaign: dict[UUID, list[AdCreative]] = {}
+        if campaign_ids:
+            targets = list(
+                (
+                    await self.session.scalars(
+                        select(AdTargeting).where(AdTargeting.campaign_id.in_(campaign_ids))
+                    )
+                ).all()
+            )
+            targets_by_campaign = {item.campaign_id: item for item in targets}
+            creatives = list(
+                (
+                    await self.session.scalars(
+                        select(AdCreative)
+                        .where(AdCreative.campaign_id.in_(campaign_ids))
+                        .order_by(
+                            AdCreative.campaign_id,
+                            AdCreative.created_at,
+                            AdCreative.id,
+                        )
+                    )
+                ).all()
+            )
+            for creative in creatives:
+                creatives_by_campaign.setdefault(creative.campaign_id, []).append(creative)
         impression_count = await self.session.scalar(
             select(func.count())
             .select_from(AdImpression)
@@ -95,7 +122,14 @@ class AdvertisingService:
             portal_slug=portal.slug,
             enabled=portal.feature_flags.get("advertising", False) is True,
             placements=[self._placement_view(item) for item in placements],
-            campaigns=[await self._campaign_view(item) for item in campaigns],
+            campaigns=[
+                self._campaign_view_from(
+                    item,
+                    targets_by_campaign[item.id],
+                    creatives_by_campaign.get(item.id, []),
+                )
+                for item in campaigns
+            ],
             impressions=int(impression_count or 0),
             clicks=int(click_count or 0),
         )
@@ -548,6 +582,14 @@ class AdvertisingService:
             ).all()
         )
         assert target is not None
+        return self._campaign_view_from(item, target, creatives)
+
+    @staticmethod
+    def _campaign_view_from(
+        item: AdCampaign,
+        target: AdTargeting,
+        creatives: list[AdCreative],
+    ) -> CampaignView:
         return CampaignView(
             id=item.id,
             name=item.name,
