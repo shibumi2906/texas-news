@@ -5,8 +5,12 @@ from typing import Any, Protocol
 from uuid import UUID
 
 import httpx
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from news_platform.core.config import Settings
+from news_platform.modules.setup.application.service import decrypt_secret
+from news_platform.modules.setup.domain.models import PortalIntegration
 
 
 class NotificationGatewayError(Exception):
@@ -18,6 +22,7 @@ class NotificationGatewayError(Exception):
 @dataclass(frozen=True)
 class DeliveryRequest:
     delivery_id: UUID
+    portal_id: UUID
     destination: str
     configuration: dict[str, Any]
     title: str
@@ -30,13 +35,16 @@ class NotificationSender(Protocol):
 
 
 class NotificationGateway:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, session: AsyncSession | None = None) -> None:
         self.settings = settings
+        self.session = session
 
     async def send(self, channel: str, request: DeliveryRequest) -> None:
         payload: dict[str, Any]
+        dynamic_url, dynamic_key = await self._dynamic_configuration(channel, request.portal_id)
         if channel == "email":
-            url = self.settings.notification_email_gateway_url
+            url = dynamic_url or self.settings.notification_email_gateway_url
+            key_value = dynamic_key
             key = self.settings.notification_email_gateway_key
             payload = {
                 "to": request.destination,
@@ -45,7 +53,8 @@ class NotificationGateway:
                 "url": request.url,
             }
         elif channel == "web_push":
-            url = self.settings.notification_web_push_gateway_url
+            url = dynamic_url or self.settings.notification_web_push_gateway_url
+            key_value = dynamic_key
             key = self.settings.notification_web_push_gateway_key
             payload = {
                 "subscription": {
@@ -61,10 +70,12 @@ class NotificationGateway:
             }
         else:
             raise NotificationGatewayError("unsupported_channel")
-        if not url or key is None:
+        if key_value is None and key is not None:
+            key_value = key.get_secret_value()
+        if not url or key_value is None:
             raise NotificationGatewayError("gateway_not_configured")
         headers = {
-            "Authorization": f"Bearer {key.get_secret_value()}",
+            "Authorization": f"Bearer {key_value}",
             "Idempotency-Key": str(request.delivery_id),
         }
         try:
@@ -79,3 +90,25 @@ class NotificationGateway:
             raise NotificationGatewayError(f"gateway_http_{exc.response.status_code}") from exc
         except httpx.RequestError as exc:
             raise NotificationGatewayError("gateway_unavailable") from exc
+
+    async def _dynamic_configuration(
+        self, channel: str, portal_id: UUID
+    ) -> tuple[str | None, str | None]:
+        if self.session is None:
+            return None, None
+        kind = "email" if channel == "email" else "web_push"
+        record = await self.session.scalar(
+            select(PortalIntegration).where(
+                PortalIntegration.portal_id == portal_id,
+                PortalIntegration.kind == kind,
+                PortalIntegration.enabled.is_(True),
+                PortalIntegration.verified.is_(True),
+            )
+        )
+        if record is None:
+            return None, None
+        endpoint = record.configuration.get("endpoint")
+        return (
+            endpoint if isinstance(endpoint, str) else None,
+            decrypt_secret(self.settings, record.secret_ciphertext),
+        )

@@ -4,6 +4,7 @@ import { AiStorySummary } from "@/components/ai-story-summary";
 import { AiAssistant } from "@/components/ai-assistant";
 import { CommunityPanel } from "@/components/community";
 import { GalleryExperience, ShortsFeed } from "@/components/media-experience";
+import { ResilientMedia } from "@/components/resilient-media";
 
 import type {
   FeedPageData,
@@ -68,21 +69,11 @@ function ui(language: string) {
 
 function MediaFrame({ story }: { story: StorySummary; priority?: boolean }) {
   const media = primaryMedia(story);
-  const source = media?.thumbnail_url ?? media?.url;
-  if (!source) {
-    return (
-      <div className="media-frame media-fallback" aria-hidden="true">
-        <span>★</span>
-      </div>
-    );
-  }
-  return (
-    <div
-      className="media-frame media-image"
-      style={{ backgroundImage: `url(${JSON.stringify(source)})` }}
-      aria-hidden="true"
-    />
-  );
+  const source =
+    media?.thumbnail_url ?? (media?.type === "image" ? media.url : null);
+  const fallbackSymbol =
+    media?.type === "video" || story.content_type === "live" ? "▶" : "★";
+  return <ResilientMedia source={source} fallbackSymbol={fallbackSymbol} />;
 }
 
 function CategoryBadge({ story }: { story: StorySummary }) {
@@ -341,7 +332,7 @@ export function HomeView({ data }: { data: Homepage }) {
           </>
         )}
       </main>
-      <SiteFooter portal={data.portal} />
+      <SiteFooter portal={data.portal} language={data.language} />
     </>
   );
 }
@@ -390,7 +381,7 @@ export function FeedView({
           ) : null}
         </nav>
       </main>
-      <SiteFooter portal={data.portal} />
+      <SiteFooter portal={data.portal} language={data.language} />
     </>
   );
 }
@@ -420,7 +411,7 @@ export function ShortsView({ data }: { data: FeedPageData }) {
           nextHref={nextHref}
         />
       </main>
-      <SiteFooter portal={data.portal} />
+      <SiteFooter portal={data.portal} language={data.language} />
     </>
   );
 }
@@ -464,7 +455,7 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
             portalSlug={portal.slug}
           />
         </main>
-        <SiteFooter portal={portal} />
+        <SiteFooter portal={portal} language={story.language} />
       </>
     );
   }
@@ -487,11 +478,16 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
               <p className="story-subtitle">{story.subtitle}</p>
             ) : null}
             <div className="byline">
-              <span>
-                {story.author
-                  ? `By ${story.author}`
-                  : "Texas Entertainment Daily"}
-              </span>
+              {story.author ? (
+                <Link
+                  href={`${prefix(story.language, portal)}/authors/${encodeURIComponent(story.author)}`}
+                  rel="author"
+                >
+                  {story.language === "es" ? "Por" : "By"} {story.author}
+                </Link>
+              ) : (
+                <span>{portal.name}</span>
+              )}
               {story.source ? <span>Source: {story.source.name}</span> : null}
               <time dateTime={story.published_at}>
                 Published{" "}
@@ -638,17 +634,48 @@ export function StoryView({ story, portal }: { story: Story; portal: Portal }) {
           </aside>
         ) : null}
       </main>
-      <SiteFooter portal={portal} />
+      <SiteFooter portal={portal} language={story.language} />
     </>
   );
 }
 
-function SiteFooter({ portal }: { portal: Portal }) {
+export function SiteFooter({
+  portal,
+  language = portal.default_language,
+}: {
+  portal: Portal;
+  language?: string;
+}) {
+  const base = prefix(language, portal);
+  const labels =
+    language === "es"
+      ? {
+          about: "Quiénes somos",
+          contact: "Contacto",
+          editorial: "Política editorial",
+          corrections: "Correcciones",
+          ownership: "Propiedad",
+        }
+      : {
+          about: "About",
+          contact: "Contact",
+          editorial: "Editorial policy",
+          corrections: "Corrections",
+          ownership: "Ownership",
+        };
   return (
     <footer className="site-footer">
       <div className="page-width">
         <strong>{portal.name}</strong>
         <span>Local stories. Texas perspective.</span>
+        <nav aria-label="Publisher information">
+          <Link href={`${base}/about`}>{labels.about}</Link>
+          <Link href={`${base}/contact`}>{labels.contact}</Link>
+          <Link href={`${base}/editorial-policy`}>{labels.editorial}</Link>
+          <Link href={`${base}/corrections`}>{labels.corrections}</Link>
+          <Link href={`${base}/ownership`}>{labels.ownership}</Link>
+          <a href={`${base}/rss.xml`}>RSS</a>
+        </nav>
       </div>
     </footer>
   );

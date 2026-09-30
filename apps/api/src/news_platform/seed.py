@@ -231,6 +231,29 @@ async def seed_texas(session: AsyncSession) -> SeedResult:
             )
         )
 
+    sample_media_id = await session.scalar(
+        select(MediaAsset.id).where(MediaAsset.content_item_id == sample_story.id).limit(1)
+    )
+    if (
+        sample_story.external_id == "seed:texas:austin-summer-music-series"
+        and sample_media_id is None
+    ):
+        session.add(
+            MediaAsset(
+                content_item_id=sample_story.id,
+                position=0,
+                type=MediaType.IMAGE,
+                source_url=(
+                    "https://images.unsplash.com/photo-1521337581100-8ca9a73a5f79"
+                    "?auto=format&fit=crop&w=1600&q=80"
+                ),
+                mime_type="image/jpeg",
+                attribution="Austin live music",
+                metadata_={},
+                status=MediaStatus.READY,
+            )
+        )
+
     phase13_samples = (
         (
             "texas-night-lights-gallery",

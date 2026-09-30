@@ -132,6 +132,7 @@ async def add_story(
     category: str = "sports",
     published_at: datetime | None = None,
     content_type: ContentType = ContentType.ARTICLE,
+    author: str | None = None,
 ) -> ContentItem:
     content = ContentItem(
         id=UUID(int=identity),
@@ -147,6 +148,7 @@ async def add_story(
         subtitle=f"Subtitle for {title}",
         description=f"Description for {title}",
         body=f"Body for {title}\n\nSecond paragraph.",
+        author=author,
         site_published_at=published_at or NOW - timedelta(hours=1),
         has_editorial_override=title.startswith("Editorial"),
         metadata_={},
@@ -332,3 +334,37 @@ async def test_canonical_urls_follow_each_portal_configuration(
         assert oklahoma.canonical_url == "https://oklahoma.example/story/story-22"
         assert texas.portal.slug == "texas"
         assert oklahoma.portal.slug == "oklahoma"
+
+
+async def test_public_author_page_reuses_eligibility_and_portal_scope(
+    database: tuple[AsyncEngine, async_sessionmaker[Any]],
+) -> None:
+    _engine, factory = database
+    async with factory() as session, session.begin():
+        domain = await seed_public_domain(session)
+        visible = await add_story(
+            session, domain, identity=31, title="Visible byline", author="Ada Reporter"
+        )
+        await add_story(
+            session,
+            domain,
+            identity=32,
+            title="Unpublished byline",
+            author="Ada Reporter",
+            status=ContentStatus.UNPUBLISHED,
+        )
+        await add_story(
+            session,
+            domain,
+            identity=33,
+            title="Outside portal",
+            author="Ada Reporter",
+            geography="oklahoma",
+        )
+
+    async with factory() as session:
+        page = await PublicSiteService(session, now=NOW).author("texas", "Ada Reporter", "en")
+        assert page.name == "Ada Reporter"
+        assert page.canonical_url == ("https://news.texas.example/authors/Ada%20Reporter")
+        assert [item.id for item in page.items] == [visible.id]
+        assert page.items[0].id == visible.id

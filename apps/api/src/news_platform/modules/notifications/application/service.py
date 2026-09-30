@@ -373,6 +373,7 @@ class NotificationDeliveryService:
                     subscription.channel,
                     DeliveryRequest(
                         delivery_id=delivery.id,
+                        portal_id=message.portal_id,
                         destination=subscription.destination,
                         configuration=subscription.configuration,
                         title=message.title,
@@ -405,4 +406,5 @@ async def process_notifications_once(
     session_factory: async_sessionmaker[AsyncSession], gateway: NotificationGateway, batch_size: int
 ) -> tuple[int, int]:
     async with session_factory() as session, session.begin():
+        gateway.session = session
         return await NotificationDeliveryService(session, gateway).deliver_batch(batch_size)

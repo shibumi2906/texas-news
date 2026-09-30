@@ -70,6 +70,8 @@ services:
       NOTIFICATION_EMAIL_GATEWAY_KEY: ${NOTIFICATION_EMAIL_GATEWAY_KEY:-}
       NOTIFICATION_WEB_PUSH_GATEWAY_URL: ${NOTIFICATION_WEB_PUSH_GATEWAY_URL:-}
       NOTIFICATION_WEB_PUSH_GATEWAY_KEY: ${NOTIFICATION_WEB_PUSH_GATEWAY_KEY:-}
+      SETUP_MASTER_KEY: ${SETUP_MASTER_KEY:-local-development-only-change-before-production}
+      SETUP_BOOTSTRAP_TOKEN: ${SETUP_BOOTSTRAP_TOKEN:-}
       PYTHONPATH: /app/src
     command: ["sh", "-c", "alembic upgrade head && uvicorn news_platform.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/src"]
     ports:
@@ -110,6 +112,7 @@ services:
       NOTIFICATION_EMAIL_GATEWAY_KEY: ${NOTIFICATION_EMAIL_GATEWAY_KEY:-}
       NOTIFICATION_WEB_PUSH_GATEWAY_URL: ${NOTIFICATION_WEB_PUSH_GATEWAY_URL:-}
       NOTIFICATION_WEB_PUSH_GATEWAY_KEY: ${NOTIFICATION_WEB_PUSH_GATEWAY_KEY:-}
+      SETUP_MASTER_KEY: ${SETUP_MASTER_KEY:-local-development-only-change-before-production}
       PYTHONPATH: /app/src
     command: ["python", "-m", "news_platform.worker"]
     volumes:

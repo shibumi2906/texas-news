@@ -10,6 +10,9 @@ export const metadata: Metadata = {
     template: "%s | Texas Entertainment Daily",
   },
   description: "Entertainment and culture from across Texas.",
+  alternates: {
+    types: { "application/rss+xml": "/rss.xml" },
+  },
 };
 
 export default async function RootLayout({

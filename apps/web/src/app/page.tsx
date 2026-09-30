@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
 import { HomeView } from "@/components/public-site";
-import { getHomepage } from "@/lib/public-api";
+import { PublisherStructuredData } from "@/components/structured-data";
+import { getHomepage, getSetupStatus } from "@/lib/public-api";
 
 export const dynamic = "force-dynamic";
 
@@ -22,5 +24,13 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function Home() {
-  return <HomeView data={await getHomepage()} />;
+  const setup = await getSetupStatus();
+  if (setup.required) redirect("/setup");
+  const data = await getHomepage();
+  return (
+    <>
+      <PublisherStructuredData portal={data.portal} />
+      <HomeView data={data} />
+    </>
+  );
 }

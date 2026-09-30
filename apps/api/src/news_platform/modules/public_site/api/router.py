@@ -11,6 +11,7 @@ from news_platform.modules.public_site.application.service import (
     PublicSiteService,
 )
 from news_platform.modules.public_site.domain.schemas import (
+    PublicAuthorPage,
     PublicCategoryPage,
     PublicHomepage,
     PublicStory,
@@ -80,5 +81,18 @@ async def story(
 ) -> PublicStory:
     try:
         return await PublicSiteService(session).story(portal_slug, story_slug, language)
+    except PublicNotFoundError as exc:
+        not_found(exc)
+
+
+@router.get("/authors/{author_name}", response_model=PublicAuthorPage)
+async def author(
+    portal_slug: str,
+    author_name: str,
+    language: str | None = Query(default=None, min_length=2, max_length=35),
+    session: AsyncSession = DatabaseSession,
+) -> PublicAuthorPage:
+    try:
+        return await PublicSiteService(session).author(portal_slug, author_name, language)
     except PublicNotFoundError as exc:
         not_found(exc)

@@ -61,6 +61,7 @@ from news_platform.modules.recommendations.domain.models import (
     UserInterest,
 )
 from news_platform.modules.search.domain.models import SearchGeneration
+from news_platform.modules.setup.domain.models import PortalIntegration
 from news_platform.modules.taxonomy.domain.models import Category, Topic
 from news_platform.modules.users.domain.models import AuthSession, User, UserIdentity, UserProfile
 
@@ -102,6 +103,7 @@ __all__ = [
     "NotificationMessage",
     "NotificationSubscription",
     "Portal",
+    "PortalIntegration",
     "PromptDefinition",
     "PromptVersion",
     "Reaction",

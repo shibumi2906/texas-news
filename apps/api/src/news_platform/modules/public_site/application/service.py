@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import quote, urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from news_platform.modules.content.domain.models import ContentType
 from news_platform.modules.portals.domain.models import Portal
 from news_platform.modules.public_site.domain.schemas import (
+    PublicAuthorPage,
     PublicCategory,
     PublicCategoryPage,
     PublicCategorySection,
@@ -189,6 +190,47 @@ class PublicSiteService:
             related=[self._summary(portal, item) for item in related],
         )
 
+    async def author(
+        self, portal_slug: str, author_name: str, language: str | None = None
+    ) -> PublicAuthorPage:
+        portal = await self._portal(portal_slug)
+        language = self._language(portal, language)
+        name = author_name.strip()
+        if not name or len(name) > 255:
+            raise PublicNotFoundError("author not found")
+        categories = await self.repository.portal_categories(portal)
+        records, _ = await self.repository.list_content(
+            portal, self.now, author=name, limit=50, language=language
+        )
+        if not records:
+            raise PublicNotFoundError("author not found")
+        path = f"/authors/{quote(name, safe='')}"
+        available_languages: list[str] = []
+        for candidate in portal.supported_languages:
+            if candidate == language:
+                candidate_records = records
+            else:
+                candidate_records, _ = await self.repository.list_content(
+                    portal,
+                    self.now,
+                    author=name,
+                    limit=1,
+                    language=candidate,
+                )
+            if candidate_records:
+                available_languages.append(candidate)
+        return PublicAuthorPage(
+            portal=self._portal_view(portal, categories),
+            language=language,
+            name=name,
+            canonical_url=self._localized_url(portal, language, path),
+            alternates={
+                candidate: self._localized_url(portal, candidate, path)
+                for candidate in available_languages
+            },
+            items=[self._summary(portal, record) for record in records],
+        )
+
     async def _portal(self, slug: str) -> Portal:
         portal = await self.repository.get_portal(slug)
         if portal is None:
@@ -204,6 +246,7 @@ class PublicSiteService:
             default_language=portal.default_language,
             supported_languages=portal.supported_languages,
             canonical_url=self._portal_base_url(portal),
+            logo=portal.logo,
             branding=portal.branding,
             categories=[
                 PublicCategory(name=category.name, slug=category.slug) for category in categories

@@ -54,6 +54,7 @@ class PublicPortal(BaseModel):
     default_language: str
     supported_languages: list[str]
     canonical_url: str
+    logo: str | None = None
     branding: dict[str, Any]
     categories: list[PublicCategory]
 
@@ -114,3 +115,12 @@ class PublicStory(PublicStorySummary):
     entities: list[PublicEntity]
     seo: dict[str, Any]
     related: list[PublicStorySummary]
+
+
+class PublicAuthorPage(BaseModel):
+    portal: PublicPortal
+    language: str
+    name: str
+    canonical_url: str
+    alternates: dict[str, str]
+    items: list[PublicStorySummary]

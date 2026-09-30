@@ -1,7 +1,9 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CategoryView, HomeView, StoryView } from "@/components/public-site";
+import { StoryStructuredData } from "@/components/structured-data";
+import { ResilientMedia } from "@/components/resilient-media";
 import type { Homepage, Portal, Story, StorySummary } from "@/lib/public-api";
 
 const portal: Portal = {
@@ -109,6 +111,14 @@ describe("Home", () => {
 });
 
 describe("public detail pages", () => {
+  it("falls back cleanly when a remote image cannot be loaded", () => {
+    const { container } = render(
+      <ResilientMedia source="https://broken.example/image.jpg" />,
+    );
+    fireEvent.error(container.querySelector("img")!);
+    expect(container.querySelector(".media-fallback")).toBeInTheDocument();
+  });
+
   it("renders category content and pagination", () => {
     render(
       <CategoryView
@@ -197,5 +207,38 @@ describe("public detail pages", () => {
     expect(
       screen.getByRole("heading", { name: "Related stories" }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "By Newsroom" })).toHaveAttribute(
+      "href",
+      "/authors/Newsroom",
+    );
+  });
+
+  it("publishes article, author, geography and breadcrumb structured data", () => {
+    const story: Story = {
+      ...summary,
+      portal: { ...portal, logo: "https://texas.example/logo.png" },
+      body: "Reporting body.",
+      original_url: "https://wire.example/austin-music",
+      entities: [],
+      seo: {},
+      related: [],
+    };
+    const { container } = render(<StoryStructuredData story={story} />);
+    const payload = JSON.parse(
+      container.querySelector('script[type="application/ld+json"]')
+        ?.textContent ?? "{}",
+    );
+    expect(payload["@graph"][0]).toEqual(
+      expect.objectContaining({
+        "@type": "NewsArticle",
+        inLanguage: "en",
+        author: expect.objectContaining({
+          name: "Newsroom",
+          url: "https://texas.example/authors/Newsroom",
+        }),
+        contentLocation: [expect.objectContaining({ name: "Austin" })],
+      }),
+    );
+    expect(payload["@graph"][1]["@type"]).toBe("BreadcrumbList");
   });
 });

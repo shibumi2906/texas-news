@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { StoryView } from "@/components/public-site";
+import { StoryStructuredData } from "@/components/structured-data";
 import { getStory, PublicApiError } from "@/lib/public-api";
 
 export const dynamic = "force-dynamic";
@@ -45,27 +46,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function StoryPage({ params }: Props) {
   const story = await loadStory((await params).slug);
-  const portal = story.portal;
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "NewsArticle",
-    headline: story.title,
-    description: story.description,
-    datePublished: story.published_at,
-    dateModified: story.updated_at,
-    mainEntityOfPage: story.canonical_url,
-    image: story.media.map((media) => media.thumbnail_url ?? media.url),
-    publisher: { "@type": "NewsMediaOrganization", name: portal.name },
-  };
   return (
     <>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{
-          __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c"),
-        }}
-      />
-      <StoryView story={story} portal={portal} />
+      <StoryStructuredData story={story} />
+      <StoryView story={story} portal={story.portal} />
     </>
   );
 }

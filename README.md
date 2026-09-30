@@ -1,5 +1,49 @@
 # Local Entertainment News Platform
 
+## First-run setup dashboard
+
+After migrations and the Texas seed, open <http://localhost:3000>. An incomplete
+portal setup redirects the homepage to <http://localhost:3000/setup>; the same
+dashboard remains available later at `/admin/setup`. On an installation with no
+administrator, the dashboard can create the first admin account. Bootstrap closes
+as soon as an admin exists or setup is completed. Production bootstrap additionally
+requires the `SETUP_BOOTSTRAP_TOKEN` value.
+
+The dashboard configures the following portal-scoped settings without source-code
+changes:
+
+- publisher name, legal name, newsroom email, funding disclosure, logo, and canonical URL;
+- AI search/chat, advertising, notifications, community, and recommendation feature switches;
+- an OpenAI-compatible AI gateway;
+- transactional email and web-push HTTP gateways;
+- connection tests and final readiness validation;
+- links to the AI, advertising/notification, sitemap, and answer-engine controls.
+
+Setup can inspect PostgreSQL and Redis health but cannot configure their URLs: they
+are bootstrap dependencies required before the API can serve the dashboard. DNS,
+TLS, CDN, provider-account creation, and Search Console ownership are also external
+deployment tasks; the resulting public URL and gateway credentials are entered in
+the dashboard.
+
+Provider credentials are encrypted at rest, are write-only in the API, and are
+excluded from audit records and structured logs. Set `SETUP_MASTER_KEY` to a long,
+random, backed-up deployment secret before production; the Compose fallback is
+intentionally development-only. Rotating or losing this key makes previously saved
+provider credentials unreadable, so they must then be entered and tested again.
+All setup mutations require portal-admin RBAC and CSRF protection and write an audit
+record that contains configuration metadata but never the credential value.
+
+Only enabled integrations must pass their connection test before setup can be
+completed. Disabled integrations remain optional. A verified dashboard AI gateway
+is resolved per portal for each AI request. The notification worker resolves the
+verified email or web-push gateway for the message portal before delivery, preserving
+the existing durable queue, retry, and provider-idempotency behavior. Environment
+gateway values remain supported as a fallback for deployments that manage secrets
+outside the dashboard.
+
+Search and answer-engine discovery endpoints, launch requirements and monitoring are
+documented in [docs/ai-search-discovery.md](docs/ai-search-discovery.md).
+
 Phase 15 adds portal-scoped advertising and consent-based email/web-push notifications. It preserves the Phase 0–14 ingestion, publication, visibility, multilingual, ranking, analytics, recommendation, community, media, AI, and admin boundaries. Both public delivery features remain disabled by default for the Texas seed portal.
 
 ## Prerequisites
@@ -33,6 +77,16 @@ docker compose up --build --detach
 
 Open the web shell at <http://localhost:3000>. The API documentation is at <http://localhost:8000/docs>.
 
+On a new volume, create the initial Texas portal before opening the setup dashboard:
+
+```powershell
+docker compose exec api python -m news_platform.seed
+```
+
+Then open <http://localhost:3000/setup>. Choose the first administrator's own email
+and a password of at least 12 characters; do not reuse the example development
+credentials from tests or documentation.
+
 Stop containers:
 
 ```powershell
@@ -47,7 +101,7 @@ docker compose down --volumes
 
 ## Environment variables
 
-All supported Phase 0 variables are documented in `.env.example`:
+Supported deployment variables are documented in `.env.example`, including:
 
 - `ENVIRONMENT`, `LOG_LEVEL`
 - `API_HOST`, `API_PORT`
@@ -62,11 +116,54 @@ All supported Phase 0 variables are documented in `.env.example`:
 - `NOTIFICATION_GATEWAY_TIMEOUT_SECONDS`
 - `NOTIFICATION_EMAIL_GATEWAY_URL`, `NOTIFICATION_EMAIL_GATEWAY_KEY`
 - `NOTIFICATION_WEB_PUSH_GATEWAY_URL`, `NOTIFICATION_WEB_PUSH_GATEWAY_KEY`
+- `SETUP_MASTER_KEY`, `SETUP_BOOTSTRAP_TOKEN`
 - `WEB_PORT`, `API_BASE_URL`, `NEXT_PUBLIC_API_BASE_URL`
 
 Compose supplies container-network database and Redis URLs to backend services. Host commands use `DATABASE_URL` and `REDIS_URL` from `.env`.
 
 Gateway keys are secrets and are never returned by APIs or written to structured logs. Empty gateway URLs/keys are valid for local startup; queued deliveries fail with the non-secret `gateway_not_configured` code. Configured gateways receive `Idempotency-Key: <delivery UUID>` and must honor it across retries.
+
+`SETUP_MASTER_KEY` is the single bootstrap secret used to encrypt dashboard-managed
+provider credentials. `SETUP_BOOTSTRAP_TOKEN` is required only for creating the first
+admin while `ENVIRONMENT=production`; it is not stored in the database. After the
+first administrator is created, remove the bootstrap token from the deployment
+environment at the next controlled restart. Do not use the Compose development
+fallback for `SETUP_MASTER_KEY` outside local development.
+
+Environment-provided `AI_GATEWAY_*` and `NOTIFICATION_*_GATEWAY_*` values continue
+to work. When a portal has an enabled and verified dashboard record for the same
+integration, the portal-scoped dashboard record is used for that request or delivery.
+
+## Setup API and security boundaries
+
+The public setup surface exposes only whether setup is required:
+
+```text
+GET /api/v1/portals/{portal}/setup/status
+```
+
+The one-time admin bootstrap endpoint is available only until an administrator
+exists or setup completes. In production it also requires `X-Setup-Token`:
+
+```text
+POST /api/v1/portals/{portal}/setup/bootstrap-admin
+```
+
+All configuration reads and mutations are admin-only:
+
+```text
+GET  /api/v1/portals/{portal}/admin/setup
+PUT  /api/v1/portals/{portal}/admin/setup/publisher
+PUT  /api/v1/portals/{portal}/admin/setup/features
+PUT  /api/v1/portals/{portal}/admin/setup/integrations/{kind}
+POST /api/v1/portals/{portal}/admin/setup/integrations/{kind}/test
+POST /api/v1/portals/{portal}/admin/setup/complete
+```
+
+Mutation endpoints require the existing session cookie and CSRF token. Integration
+responses expose only `secret_configured` and a final-four-character hint. They never
+return plaintext or ciphertext. Connection checks use bounded timeouts and do not
+follow redirects.
 
 ## Phase 15 advertising and notifications
 
@@ -75,6 +172,13 @@ Advertising is owned by the `advertising` backend module. Admins manage portal-s
 Authenticated users own notification subscriptions under `/notifications/subscriptions`. Email always resolves from the authenticated account; web-push endpoint and keys are write-only and admin summaries expose counts only. Admin notification messages require the existing admin role and CSRF protection, optionally bind to an eligible canonical content item, create one durable delivery per enabled matching subscription, and write an editorial audit event. The worker claims pending deliveries with PostgreSQL row locks and sends through the configured email/web-push gateway adapters. Provider calls carry the delivery UUID as their idempotency key. `/admin/distribution` exposes placements, campaigns, tracking totals, subscription/delivery totals, and notification dispatch.
 
 Migration `0016_phase_15_ads_notifications` creates all advertising, tracking, subscription, message, and delivery tables. Its downgrade removes only Phase 15 state. The Texas seed explicitly keeps `advertising=false` and `notifications=false`; enabling either is a tenant operational decision, not a schema migration side effect.
+
+Migration `0017_setup_dashboard` adds the portal-scoped integration configuration
+table, including encrypted credential storage, non-secret configuration, verification
+state, and the `(portal_id, kind)` uniqueness boundary. Downgrading to `0016` removes
+only dashboard integration records; publisher settings, feature flags, content, ads,
+notifications, and Phase 0–15 data remain intact. Re-upgrade recreates an empty
+integration table, so dashboard credentials must be entered again after that downgrade.
 
 ## Backend host development
 

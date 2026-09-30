@@ -11,6 +11,13 @@ import {
 } from "@/components/public-site";
 import { SearchView } from "@/components/search-view";
 import {
+  PublisherStructuredData,
+  StoryStructuredData,
+} from "@/components/structured-data";
+import { AuthorPage, TrustPage } from "@/components/trust-pages";
+import { TRUST_PATHS, type TrustPath } from "@/lib/discovery";
+import {
+  getAuthor,
   getCategory,
   getHomepage,
   getLatest,
@@ -41,11 +48,25 @@ type Route = {
     | "search"
     | "for-you"
     | "following"
-    | "shorts";
+    | "shorts"
+    | "trust"
+    | "author";
   value?: string;
 };
 
 async function resolveRoute(segments: string[]): Promise<Route> {
+  if (segments.length === 1 && TRUST_PATHS.includes(segments[0] as TrustPath)) {
+    return { language: "en", kind: "trust", value: segments[0] };
+  }
+  if (segments.length === 2 && segments[0] === "authors") {
+    return { language: "en", kind: "author", value: segments[1] };
+  }
+  if (segments.length === 2 && TRUST_PATHS.includes(segments[1] as TrustPath)) {
+    return { language: segments[0], kind: "trust", value: segments[1] };
+  }
+  if (segments.length === 3 && segments[1] === "authors") {
+    return { language: segments[0], kind: "author", value: segments[2] };
+  }
   if (segments.length === 1 && segments[0] === "shorts") {
     return { language: "en", kind: "shorts" };
   }
@@ -126,6 +147,15 @@ async function load(props: Props) {
     if (route.kind === "story") {
       return { route, data: await getStory(route.value ?? "", route.language) };
     }
+    if (route.kind === "trust") {
+      return { route, data: await getHomepage(route.language) };
+    }
+    if (route.kind === "author") {
+      return {
+        route,
+        data: await getAuthor(route.value ?? "", route.language),
+      };
+    }
     return { route, data: null };
   } catch (error) {
     if (error instanceof PublicApiError && error.status === 404) notFound();
@@ -141,7 +171,9 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
       robots: { index: false },
     };
   }
-  if (route.kind === "for-you" || route.kind === "following") return {};
+  if (route.kind === "for-you" || route.kind === "following") {
+    return { robots: { index: false, follow: false } };
+  }
   if (!data) return {};
   if (route.kind === "story" && "seo" in data) {
     const description =
@@ -167,6 +199,49 @@ export async function generateMetadata(props: Props): Promise<Metadata> {
       },
     };
   }
+  if (route.kind === "trust" && "hero" in data) {
+    const path = route.value as TrustPath;
+    const titles: Record<TrustPath, string> = {
+      about: route.language === "es" ? "Quiénes somos" : "About us",
+      contact: route.language === "es" ? "Contacto" : "Contact",
+      "editorial-policy":
+        route.language === "es" ? "Política editorial" : "Editorial policy",
+      corrections:
+        route.language === "es"
+          ? "Política de correcciones"
+          : "Corrections policy",
+      ownership:
+        route.language === "es"
+          ? "Propiedad y financiación"
+          : "Ownership and funding",
+    };
+    const prefix =
+      route.language === data.portal.default_language
+        ? ""
+        : `/${route.language}`;
+    return {
+      title: titles[path],
+      alternates: {
+        canonical: `${data.portal.canonical_url}${prefix}/${path}`,
+        languages: Object.fromEntries(
+          data.portal.supported_languages.map((language) => [
+            language,
+            `${data.portal.canonical_url}${language === data.portal.default_language ? "" : `/${language}`}/${path}`,
+          ]),
+        ),
+      },
+    };
+  }
+  if (route.kind === "author" && "name" in data) {
+    return {
+      title: data.name,
+      description:
+        route.language === "es"
+          ? `Artículos publicados por ${data.name}.`
+          : `Published reporting by ${data.name}.`,
+      alternates: metadataAlternates(data.canonical_url, data.alternates),
+    };
+  }
   const title =
     route.kind === "home"
       ? "Texas Entertainment Daily"
@@ -185,7 +260,12 @@ export default async function LocalizedPage(props: Props) {
   const raw = await props.searchParams;
   const base = route.language === "en" ? "" : `/${route.language}`;
   if (route.kind === "home" && data && "hero" in data)
-    return <HomeView data={data} />;
+    return (
+      <>
+        <PublisherStructuredData portal={data.portal} />
+        <HomeView data={data} />
+      </>
+    );
   if (route.kind === "category" && data && "feed" in data)
     return <CategoryView data={data} />;
   if (route.kind === "latest" && data && "feed" in data) {
@@ -201,7 +281,18 @@ export default async function LocalizedPage(props: Props) {
     return <FeedView data={data} path={`${base}/local/${route.value}`} />;
   }
   if (route.kind === "story" && data && "seo" in data) {
-    return <StoryView story={data} portal={data.portal} />;
+    return (
+      <>
+        <StoryStructuredData story={data} />
+        <StoryView story={data} portal={data.portal} />
+      </>
+    );
+  }
+  if (route.kind === "trust" && data && "hero" in data) {
+    return <TrustPage data={data} path={route.value as TrustPath} />;
+  }
+  if (route.kind === "author" && data && "name" in data) {
+    return <AuthorPage data={data} />;
   }
   if (route.kind === "for-you" || route.kind === "following") {
     return (

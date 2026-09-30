@@ -19,11 +19,22 @@ from news_platform.modules.ai.domain.schemas import (
     AIQuickBriefRequest,
     StorySummaryResponse,
 )
+from news_platform.modules.ai.infrastructure.providers import ProviderRegistry
 from news_platform.modules.analytics.application.service import AnalyticsIdempotencyConflictError
+from news_platform.modules.setup.application.runtime import provider_registry_for_portal
 from news_platform.modules.users.application.rate_limit import RateLimitExceededError
 
 router = APIRouter(prefix="/api/v1/portals/{portal_slug}", tags=["ai"])
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
+
+
+async def _providers(session: AsyncSession, portal_slug: str, request: Request) -> ProviderRegistry:
+    return await provider_registry_for_portal(
+        session,
+        portal_slug,
+        request.app.state.settings,
+        request.app.state.ai_providers,
+    )
 
 
 def _error(exc: Exception, status: int, code: str) -> Never:
@@ -62,7 +73,7 @@ async def story_summary(
         async with session.begin():
             return await AIService(
                 session,
-                request.app.state.ai_providers,
+                await _providers(session, portal_slug, request),
                 request.app.state.settings,
             ).story_summary(portal_slug, story_slug, language)
     except AIResourceNotFoundError as exc:
@@ -81,7 +92,9 @@ async def ai_search(
 ) -> AIAnswerResponse:
     response.headers["Cache-Control"] = "no-store"
     async with session.begin():
-        service = AIService(session, request.app.state.ai_providers, request.app.state.settings)
+        service = AIService(
+            session, await _providers(session, portal_slug, request), request.app.state.settings
+        )
         return await _run(lambda: service.ai_search(portal_slug, payload, request.app.state.redis))
 
 
@@ -96,7 +109,9 @@ async def story_question(
 ) -> AIAnswerResponse:
     response.headers["Cache-Control"] = "no-store"
     async with session.begin():
-        service = AIService(session, request.app.state.ai_providers, request.app.state.settings)
+        service = AIService(
+            session, await _providers(session, portal_slug, request), request.app.state.settings
+        )
         return await _run(
             lambda: service.story_question(
                 portal_slug, story_slug, payload, request.app.state.redis
@@ -114,7 +129,9 @@ async def trending(
 ) -> AIAnswerResponse:
     response.headers["Cache-Control"] = "no-store"
     async with session.begin():
-        service = AIService(session, request.app.state.ai_providers, request.app.state.settings)
+        service = AIService(
+            session, await _providers(session, portal_slug, request), request.app.state.settings
+        )
         return await _run(lambda: service.trending(portal_slug, payload, request.app.state.redis))
 
 
@@ -128,5 +145,7 @@ async def today(
 ) -> AIAnswerResponse:
     response.headers["Cache-Control"] = "no-store"
     async with session.begin():
-        service = AIService(session, request.app.state.ai_providers, request.app.state.settings)
+        service = AIService(
+            session, await _providers(session, portal_slug, request), request.app.state.settings
+        )
         return await _run(lambda: service.today(portal_slug, payload, request.app.state.redis))

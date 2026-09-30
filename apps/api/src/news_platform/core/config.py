@@ -68,6 +68,8 @@ class Settings(BaseSettings):
     notification_email_gateway_key: SecretStr | None = None
     notification_web_push_gateway_url: str | None = None
     notification_web_push_gateway_key: SecretStr | None = None
+    setup_master_key: SecretStr | None = None
+    setup_bootstrap_token: SecretStr | None = None
 
 
 @lru_cache

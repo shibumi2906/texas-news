@@ -31,6 +31,7 @@ from news_platform.modules.recommendations.api.router import (
 )
 from news_platform.modules.recommendations.api.router import router as recommendations_router
 from news_platform.modules.search.api.router import router as search_router
+from news_platform.modules.setup.api.router import router as setup_router
 from news_platform.modules.users.api.router import router as users_router
 
 
@@ -77,6 +78,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(advertising_admin_router)
     application.include_router(notifications_router)
     application.include_router(notifications_admin_router)
+    application.include_router(setup_router)
     return application
 
 

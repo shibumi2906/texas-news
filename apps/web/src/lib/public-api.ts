@@ -26,6 +26,7 @@ export type Portal = {
   default_language: string;
   supported_languages: string[];
   canonical_url: string;
+  logo?: string | null;
   branding: Record<string, unknown>;
   categories: Category[];
 };
@@ -91,6 +92,15 @@ export type Story = StorySummary & {
   related: StorySummary[];
 };
 
+export type AuthorPageData = {
+  portal: Portal;
+  language: string;
+  name: string;
+  canonical_url: string;
+  alternates: Record<string, string>;
+  items: StorySummary[];
+};
+
 export class PublicApiError extends Error {
   constructor(
     public readonly status: number,
@@ -121,6 +131,12 @@ async function request<T>(path: string): Promise<T> {
 export const getHomepage = cache((language = "en") =>
   request<Homepage>(
     `/api/v1/portals/texas/home?${new URLSearchParams({ language })}`,
+  ),
+);
+
+export const getSetupStatus = cache(() =>
+  request<{ required: boolean; completed: boolean }>(
+    "/api/v1/portals/texas/setup/status",
   ),
 );
 
@@ -156,6 +172,9 @@ export const getCategory = (slug: string, cursor?: string, language = "en") =>
 export const getLatest = (cursor?: string, language = "en") =>
   getFeed("latest", undefined, cursor, 12, language);
 
+export const getPublicIndexPage = (cursor?: string, language = "en") =>
+  getFeed("latest", undefined, cursor, 50, language);
+
 export const getTrending = (cursor?: string, language = "en") =>
   getFeed("trending", undefined, cursor, 12, language);
 
@@ -168,6 +187,12 @@ export const getLocal = (geography: string, cursor?: string, language = "en") =>
 export const getStory = cache((slug: string, language = "en") =>
   request<Story>(
     `/api/v1/portals/texas/stories/${encodeURIComponent(slug)}?${new URLSearchParams({ language })}`,
+  ),
+);
+
+export const getAuthor = cache((name: string, language = "en") =>
+  request<AuthorPageData>(
+    `/api/v1/portals/texas/authors/${encodeURIComponent(name)}?${new URLSearchParams({ language })}`,
   ),
 );
 

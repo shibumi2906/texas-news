@@ -148,6 +148,7 @@ class PublicSiteRepository:
         category_id: UUID | None = None,
         content_types: set[ContentType] | None = None,
         exclude_id: UUID | None = None,
+        author: str | None = None,
         offset: int = 0,
         limit: int = 20,
         language: str,
@@ -168,6 +169,8 @@ class PublicSiteRepository:
             statement = statement.where(ContentItem.content_type.in_(content_types))
         if exclude_id is not None:
             statement = statement.where(ContentItem.id != exclude_id)
+        if author is not None:
+            statement = statement.where(ContentItem.author == author)
         total = await self.session.scalar(
             select(func.count()).select_from(statement.order_by(None).subquery())
         )
